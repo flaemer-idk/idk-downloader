@@ -4,6 +4,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import * as db from './db.js';
 import * as downloader from './downloader.js';
+import { estimateRemaining } from './estimate.js';
 import { log } from './logger.js';
 import { prepareTask } from './tasks.js';
 
@@ -54,6 +55,31 @@ function diskSpace(dir) {
   }
 }
 
+/**
+ * Состояние места: свободно на диске и сколько ещё нужно очереди.
+ * Место считаем по той папке, куда файлы реально пишутся: если настроена
+ * медиатека (library_dir), настройка папки загрузок тут ни при чём —
+ * иначе «свободно 200 ГБ» относилось бы к другому диску.
+ */
+function spaceSummary() {
+  const settings = db.getSettings();
+  const dir = downloader.saveDir(settings);
+  const space = diskSpace(dir);
+  const { unfinished, doneSizes } = db.spaceInput();
+  const need = estimateRemaining(unfinished, doneSizes);
+
+  return {
+    dir,
+    freeSpace: space.free,
+    totalSpace: space.total,
+    needBytes: need.bytes,
+    needUnknown: need.unknown,
+    placeholderBytes: need.placeholderBytes,
+    enough:
+      space.free == null ? null : need.bytes <= space.free,
+  };
+}
+
 async function handleApi(req, res, url) {
   const method = req.method;
   const pathname = url.pathname;
@@ -61,15 +87,23 @@ async function handleApi(req, res, url) {
   if (pathname === '/api/state' && method === 'GET') {
     const limit = Math.min(Number(url.searchParams.get('limit')) || 300, 1000);
     const settings = db.getSettings();
-    const space = diskSpace(settings.download_dir);
+    const space = spaceSummary();
     return send(res, 200, {
       server: {
         version: config.version,
         node: process.version,
         ffmpeg: downloader.ffmpegAvailable(),
         downloadDir: settings.download_dir,
-        freeSpace: space.free,
-        totalSpace: space.total,
+        // Реальная папка, куда пишутся файлы (медиатека, если настроена),
+        // и место именно по ней.
+        saveDir: space.dir,
+        libraryDir: settings.library_dir || null,
+        freeSpace: space.freeSpace,
+        totalSpace: space.totalSpace,
+        needBytes: space.needBytes,
+        needUnknown: space.needUnknown,
+        placeholderBytes: space.placeholderBytes,
+        spaceEnough: space.enough,
         active: downloader.activeCount(),
       },
       stats: db.getStats(),
@@ -96,7 +130,19 @@ async function handleApi(req, res, url) {
       `В очередь добавлено задач: ${created.length}` +
         (created[0] ? ` (${created[0].filename}${created.length > 1 ? ' и др.' : ''})` : ''),
     );
-    return send(res, 201, { created: created.length, tasks: created });
+    // Место считаем уже вместе с новыми задачами: если партия не влезает,
+    // попап покажет предупреждение сразу, а не посреди загрузки.
+    const space = spaceSummary();
+    return send(res, 201, {
+      created: created.length,
+      tasks: created,
+      space: {
+        needBytes: space.needBytes,
+        freeBytes: space.freeSpace,
+        unknown: space.needUnknown,
+        enough: space.enough,
+      },
+    });
   }
 
   if (pathname === '/api/tasks/cancel-all' && method === 'POST') {
@@ -165,6 +211,18 @@ async function handleApi(req, res, url) {
   const movieMatch = /^\/api\/movies\/([^/]+)$/.exec(pathname);
   if (movieMatch && method === 'GET') {
     return send(res, 200, db.movieSummary(decodeURIComponent(movieMatch[1])));
+  }
+
+  // «Отменить этот фильм» из попапа: отменяет его незаконченные задачи, чтобы
+  // не искать их в общей очереди. Сводка возвращается сразу — попап по ней
+  // перерисовывает своё предупреждение.
+  const movieCancelMatch = /^\/api\/movies\/([^/]+)\/cancel$/.exec(pathname);
+  if (movieCancelMatch && method === 'POST') {
+    const movieId = decodeURIComponent(movieCancelMatch[1]);
+    return send(res, 200, {
+      canceled: await downloader.cancelMovie(movieId),
+      movie: db.movieSummary(movieId),
+    });
   }
 
   if (pathname === '/api/settings' && method === 'GET') {

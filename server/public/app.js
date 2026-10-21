@@ -45,6 +45,8 @@ var I18N = {
       'server.title': 'Server',
       'server.free': '{v} free',
       'server.total': 'of {total} · used {used}',
+      'server.need': 'need ≈{v}',
+      'server.needHint': 'The queue still needs roughly this much: unfinished tasks minus what is already downloaded. Tasks with unknown size count as the average of finished ones, otherwise {v}.',
       'server.meta': 'v{version} · ffmpeg: {ffmpeg}',
       'server.ffmpegYes': 'available',
       'server.ffmpegNo': 'missing',
@@ -77,6 +79,10 @@ var I18N = {
       'group.files': 'Files · {n}',
       'file.video': 'video',
       'file.subs': 'subtitles',
+      'file.realResHint': 'really in the file: {w}×{h}',
+      'file.sourcePage': 'open the source page',
+      'file.expiredHint': 'Expired link? Take a fresh one on the page and send the task again —',
+      'kpi.unknownSizes': 'size unknown: {n}',
       'act.pause': 'Pause',
       'act.resume': 'Resume',
       'act.cancel': 'Cancel',
@@ -201,6 +207,8 @@ var I18N = {
       'server.title': 'Сервер',
       'server.free': 'свободно {v}',
       'server.total': 'из {total} · занято {used}',
+      'server.need': 'нужно ≈{v}',
+      'server.needHint': 'Столько места ещё понадобится очереди: незаконченные задачи минус уже скачанное. Задачи без известного веса считаются по среднему, а если истории нет — как {v}.',
       'server.meta': 'v{version} · ffmpeg: {ffmpeg}',
       'server.ffmpegYes': 'есть',
       'server.ffmpegNo': 'нет',
@@ -233,6 +241,10 @@ var I18N = {
       'group.files': 'Файлы · {n}',
       'file.video': 'видео',
       'file.subs': 'субтитры',
+      'file.realResHint': 'в файле на самом деле: {w}×{h}',
+      'file.sourcePage': 'открыть страницу-источник',
+      'file.expiredHint': 'Ссылка протухла? Возьмите свежую на странице и отправьте задачу заново —',
+      'kpi.unknownSizes': 'вес неизвестен: {n}',
       'act.pause': 'Пауза',
       'act.resume': 'Продолжить',
       'act.cancel': 'Отменить',
@@ -486,7 +498,6 @@ function icon(name) {
 
 /* ---------------- state ---------------- */
 
-var ACTIVE_STATUSES = ['queued', 'downloading', 'paused', 'error'];
 var FINISHED_STATUSES = ['done', 'canceled'];
 /* приоритет статуса группы: живой процесс важнее, ошибка — сразу за ним */
 var GROUP_STATUS_PRIORITY = ['downloading', 'error', 'paused', 'queued', 'canceled', 'done'];
@@ -836,55 +847,71 @@ function taskDisplayName(task) {
     var lang = task.subtitleLangCode || task.subtitleLang;
     parts.push(t('file.subs') + (lang ? ' (' + lang + ')' : ''));
   } else {
-    parts.push(t('file.video') + (task.quality ? ' · ' + task.quality : ''));
+    parts.push(t('file.video') + (task.quality ? ' · ' + qualityWithReal(task) : ''));
   }
   if (task.episodeTitle) parts.push(task.episodeTitle);
   return parts.join(' · ');
 }
 
 /**
- * Оценка оставшегося объёма очереди без дополнительных запросов:
- * известные размеры + среднее по уже скачанным файлам того же фильма.
+ * Что заявлено и что внутри: «1080p → 720p».
+ * Разрешение считает клиент при пробе (см. client-extension/media-probe.js),
+ * сравнение с подписью — здесь, чтобы бейдж не появлялся, когда всё честно.
  */
-function estimateQueue(tasks, freeSpace) {
-  var averages = new Map();
-  var globalSum = 0, globalCount = 0;
+function claimedHeight(label) {
+  var m = /^(\d+)\s*([pkк])/i.exec(String(label || '').trim());
+  if (!m) return null;
+  var value = Number(m[1]);
+  return /p/i.test(m[2]) ? value : value * 540; // «4K» и прочие K-подписи
+}
 
-  for (var i = 0; i < tasks.length; i++) {
-    var task = tasks[i];
-    if (task.status === 'done' && task.totalBytes > 0 && task.fileType === 'video') {
-      var key = task.movieId || task.title || 'other';
-      var entry = averages.get(key) || { sum: 0, count: 0 };
-      entry.sum += task.totalBytes;
-      entry.count += 1;
-      averages.set(key, entry);
-      globalSum += task.totalBytes;
-      globalCount += 1;
-    }
+function realResolutionText(task) {
+  if (!task.realHeight) return '';
+  var claimed = claimedHeight(task.quality);
+  if (claimed && Math.abs(task.realHeight - claimed) <= claimed * 0.05) return '';
+  return task.realHeight + 'p';
+}
+
+function qualityWithReal(task) {
+  var real = realResolutionText(task);
+  if (!task.quality) return real;
+  return real ? task.quality + ' → ' + real : task.quality;
+}
+
+/**
+ * Страница, с которой прилетела задача: расширение кладёт её в referer
+ * (например, rezka.fi/films/…html). По ней можно заново взять ссылку,
+ * когда старая протухла. Если referer — тот же хост, что и файл, это не
+ * страница, а сам CDN: не ссылаемся.
+ */
+function sourceUrl(task) {
+  var referer = String(task.referer || '').trim();
+  if (!/^https?:\/\//i.test(referer)) return null;
+  try {
+    if (new URL(referer).host === new URL(task.url).host) return null;
+  } catch (e) {
+    return null;
   }
+  return referer;
+}
 
-  var globalAverage = globalCount > 0 ? globalSum / globalCount : 0;
-  var remaining = 0, unknown = 0;
+function sourceLink(task, text) {
+  var src = sourceUrl(task);
+  if (!src) return '';
+  return '<a class="src-link" href="' + escapeHtml(src) + '" target="_blank" rel="noreferrer">' +
+    escapeHtml(text) + '</a>';
+}
 
-  for (var j = 0; j < tasks.length; j++) {
-    var t2 = tasks[j];
-    if (ACTIVE_STATUSES.indexOf(t2.status) === -1) continue;
-    if (t2.totalBytes > 0) {
-      remaining += Math.max(0, t2.totalBytes - (t2.receivedBytes || 0));
-      continue;
-    }
-    var k = t2.movieId || t2.title || 'other';
-    var e = averages.get(k);
-    var average = e && e.count > 0 ? e.sum / e.count : globalAverage;
-    if (average > 0) remaining += average;
-    else unknown += 1;
-  }
+/** Ошибка похожа на протухшую подписанную ссылку (403/404/410…)? */
+function looksExpired(task) {
+  return !!sourceUrl(task) && /\b4\d\d\b/.test(String(task.error || ''));
+}
 
-  return {
-    remaining: remaining,
-    unknown: unknown,
-    notEnoughSpace: freeSpace != null && remaining > 0 && remaining > freeSpace
-  };
+function expiredHintHtml(task) {
+  if (!looksExpired(task)) return '';
+  return '<div class="cf-hint">' + icon('info') +
+    '<span>' + escapeHtml(t('file.expiredHint')) + ' ' +
+    sourceLink(task, t('file.sourcePage')) + '</span></div>';
 }
 
 /* ---------------- two-click arming ---------------- */
@@ -1013,16 +1040,28 @@ function renderSidebar() {
   var srv = state.server;
   if (!srv) return;
   var free = srv.freeSpace, total = srv.totalSpace;
-  $('sw-free').textContent = free != null ? t('server.free', { v: formatBytes(free) }) : '—';
+  var need = srv.needBytes || 0;
+  var short = srv.spaceEnough === false;
+
+  // Место — по папке, куда файлы реально пишутся (медиатека, если настроена);
+  // «нужно» — сколько ещё понадобится всей незаконченной очереди.
+  var freeText = free != null ? t('server.free', { v: formatBytes(free) }) : '—';
+  if (need > 0) freeText += ' · ' + t('server.need', { v: formatBytes(need) });
+  $('sw-free').textContent = freeText;
+  $('sw-free').classList.toggle('bad', short);
+  $('sw-free').title = t('server.needHint', { v: formatBytes(srv.placeholderBytes || 0) });
+
   if (free != null && total) {
     var usedPct = Math.min(100, Math.max(0, (total - free) / total * 100));
     $('sw-bar-fill').style.width = usedPct.toFixed(2) + '%';
+    $('sw-bar-fill').classList.toggle('bad', short);
     $('sw-total').textContent = t('server.total', { total: formatBytes(total), used: formatBytes(total - free) });
   } else {
     $('sw-bar-fill').style.width = '0%';
+    $('sw-bar-fill').classList.remove('bad');
     $('sw-total').textContent = '—';
   }
-  $('sw-folder').textContent = srv.downloadDir || '—';
+  $('sw-folder').textContent = srv.saveDir || srv.downloadDir || '—';
   $('sw-meta').textContent = t('server.meta', {
     version: srv.version,
     ffmpeg: srv.ffmpeg ? t('server.ffmpegYes') : t('server.ffmpegNo')
@@ -1050,13 +1089,25 @@ function renderKpi() {
   $('kpi-done').textContent = String(st.done);
   $('kpi-done-sub').textContent = t('kpi.inHistory', { n: st.done + st.canceled });
 
-  var freeSpace = state.server ? state.server.freeSpace : null;
-  var est = estimateQueue(state.tasks, freeSpace == null ? null : freeSpace);
-  $('kpi-left').textContent = (est.remaining > 0 || est.unknown > 0) ? '≈ ' + formatBytes(est.remaining) : '—';
-  var leftSub = freeSpace != null ? t('kpi.freeOnServer', { v: formatBytes(freeSpace) }) : '—';
-  $('kpi-left-sub').innerHTML = est.notEnoughSpace
-    ? '<span class="err-text">' + escapeHtml(leftSub + ' · ' + t('kpi.spaceWarn')) + '</span>'
-    : escapeHtml(leftSub);
+  // «Осталось» и «нужно места» считает сервер (estimate.js) по всем
+  // незаконченным задачам — включая те, что ещё ждут своей очереди.
+  var srv = state.server || {};
+  var need = srv.needBytes || 0;
+  var unknown = srv.needUnknown || 0;
+  $('kpi-left').textContent = (need > 0 || unknown > 0) ? '≈ ' + formatBytes(need) : '—';
+
+  var subs = [];
+  subs.push(srv.freeSpace != null ? t('kpi.freeOnServer', { v: formatBytes(srv.freeSpace) }) : '—');
+  if (unknown > 0) subs.push(t('kpi.unknownSizes', { n: unknown }));
+  var leftSub = subs.join(' · ');
+  var subEl = $('kpi-left-sub');
+  if (srv.spaceEnough === false) {
+    subEl.classList.add('wrap'); // иначе «места может не хватить» режется многоточием
+    subEl.innerHTML = '<span class="err-text">' + escapeHtml(leftSub + ' · ' + t('kpi.spaceWarn')) + '</span>';
+  } else {
+    subEl.classList.remove('wrap');
+    subEl.innerHTML = escapeHtml(leftSub);
+  }
 }
 
 /* ---------------- render: queue ---------------- */
@@ -1091,10 +1142,26 @@ function renderTaskRow(task) {
     ? formatBytes(task.receivedBytes) + ' / ' + formatBytes(task.totalBytes)
     : (task.receivedBytes > 0 ? formatBytes(task.receivedBytes) : '—');
   var speedText = (task.status === 'downloading' && task.speed > 0) ? formatSpeed(task.speed) : '—';
-  var tooltip = String(task.filename || task.url || '') + (task.error ? '\n' + task.error : '');
+
+  var tooltipParts = [String(task.filename || task.url || '')];
+  if (task.realWidth && task.realHeight) {
+    tooltipParts.push(t('file.realResHint', { w: task.realWidth, h: task.realHeight }));
+  }
+  if (task.error) tooltipParts.push(task.error);
+  if (looksExpired(task)) tooltipParts.push(t('file.expiredHint') + ' ' + sourceUrl(task));
+  var tooltip = tooltipParts.join('\n');
+
+  // Имя — ссылка на страницу-источник: по ней берут свежую ссылку, когда
+  // прежняя протухла (сервер сам резолвить не может, у него нет сессии сайта).
+  var src = sourceUrl(task);
+  var nameHtml = src
+    ? '<a class="file-name file-name-link" href="' + escapeHtml(src) + '" target="_blank" rel="noreferrer" title="' +
+        escapeHtml(tooltip) + '">' + escapeHtml(name) + '</a>'
+    : '<span class="file-name" title="' + escapeHtml(tooltip) + '">' + escapeHtml(name) + '</span>';
+
   return '<div class="file-row f-' + task.status + '">' +
     '<span class="file-ico">' + icon(task.fileType === 'subtitle' ? 'captions' : 'film') + '</span>' +
-    '<span class="file-name" title="' + escapeHtml(tooltip) + '">' + escapeHtml(name) + '</span>' +
+    nameHtml +
     '<span class="file-status"><span class="pill pill-' + task.status + '">' + escapeHtml(t('status.' + task.status)) + '</span></span>' +
     '<div class="file-prog prog-state-' + task.status + '">' +
       '<div class="prog-bar"><div class="prog-fill" style="width:' + pct + '%"></div></div>' +
@@ -1103,6 +1170,18 @@ function renderTaskRow(task) {
     '<span class="file-size">' + escapeHtml(sizeText) + '</span>' +
     '<span class="file-speed' + (speedText === '—' ? ' idle' : '') + '">' + escapeHtml(speedText) + '</span>' +
   '</div>';
+}
+
+/** Страница-источник группы (первая задача, у которой она есть). */
+function groupSourceUrl(g) {
+  for (var i = 0; i < g.items.length; i++) {
+    var files = g.items[i].files || [];
+    for (var j = 0; j < files.length; j++) {
+      var src = sourceUrl(files[j]);
+      if (src) return src;
+    }
+  }
+  return null;
 }
 
 function renderGroup(g) {
@@ -1118,7 +1197,12 @@ function renderGroup(g) {
     if (files[i].status === 'error' && files[i].error) { errTask = files[i]; break; }
   }
   var errStrip = errTask
-    ? '<div class="group-error">' + icon('alert') + '<span>' + escapeHtml(errTask.error) + '</span></div>'
+    ? '<div class="group-error">' + icon('alert') + '<span>' + escapeHtml(errTask.error) + '</span>' +
+      (looksExpired(errTask)
+        ? '<span class="group-error-hint">' + escapeHtml(t('file.expiredHint')) + ' ' +
+          sourceLink(errTask, t('file.sourcePage')) + '</span>'
+        : '') +
+      '</div>'
     : '';
 
   var speedHtml = st === 'downloading' && tot.speed > 0
@@ -1131,11 +1215,19 @@ function renderGroup(g) {
   var rows = [];
   g.items.forEach(function (it) { it.files.forEach(function (f) { rows.push(renderTaskRow(f)); }); });
 
+  // Название фильма тоже ведёт на страницу-источник (удобно переотправить
+  // задачу, когда ссылки протухли, — см. подсказку в ошибке).
+  var groupSrc = groupSourceUrl(g);
+  var titleHtml = groupSrc
+    ? '<a class="group-name" href="' + escapeHtml(groupSrc) + '" target="_blank" rel="noreferrer" title="' +
+        escapeHtml(g.title) + '">' + escapeHtml(g.title) + '</a>'
+    : '<span class="group-name" title="' + escapeHtml(g.title) + '">' + escapeHtml(g.title) + '</span>';
+
   var head =
     '<div class="group-head">' +
       '<div class="group-id">' +
         '<div class="group-title">' +
-          '<span class="group-name" title="' + escapeHtml(g.title) + '">' + escapeHtml(g.title) + '</span>' +
+          titleHtml +
         '</div>' +
         '<div class="group-meta">' +
           '<span>' + escapeHtml(kindLabel) + '</span><span class="dot-sep">•</span>' +
@@ -1215,12 +1307,19 @@ function renderHistory() {
       var isSub = task.fileType === 'subtitle';
       var armedDel = isArmed('h:' + task.id + ':delete');
       var size = task.totalBytes > 0 ? task.totalBytes : (task.receivedBytes > 0 ? task.receivedBytes : null);
+      var src = sourceUrl(task);
+      var nameHtml = src
+        ? '<a class="cf-name cf-name-link" href="' + escapeHtml(src) + '" target="_blank" rel="noreferrer" title="' +
+            escapeHtml(full) + '">' + escapeHtml(name) + '</a>'
+        : '<div class="cf-name" title="' + escapeHtml(full) + '">' + escapeHtml(name) + '</div>';
       return '<tr data-rec="' + task.id + '">' +
         '<td><div class="cell-file">' +
           '<span class="file-ico">' + icon(isSub ? 'captions' : 'film') + '</span>' +
           '<div class="cf-text">' +
-            '<div class="cf-name" title="' + escapeHtml(full) + '">' + escapeHtml(name) + '</div>' +
+            nameHtml +
+            (!isSub && task.quality ? '<div class="cf-note">' + escapeHtml(qualityWithReal(task)) + '</div>' : '') +
             (task.error ? '<div class="cf-err">' + icon('alert') + '<span>' + escapeHtml(task.error) + '</span></div>' : '') +
+            expiredHintHtml(task) +
           '</div>' +
         '</div></td>' +
         '<td><span class="pill pill-' + task.status + '">' + escapeHtml(t('status.' + task.status)) + '</span></td>' +

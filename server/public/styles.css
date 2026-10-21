@@ -291,6 +291,10 @@ a { color: var(--accent); }
   box-shadow: 0 0 0 2.5px var(--err-tint);
 }
 
+/* места под очередь не хватает — тот же красный, что у ошибок */
+.sw-free.bad { color: var(--err); }
+.sw-bar-fill.bad { background: linear-gradient(90deg, #dc2626, #ef4444); }
+
 /* ============================ TOPBAR ============================ */
 
 .topbar {
@@ -538,6 +542,8 @@ a { color: var(--accent); }
   font-variant-numeric: tabular-nums;
 }
 .kpi-sub .err-text { color: var(--err); font-weight: 600; }
+/* предупреждение о месте не должно обрезаться многоточием — пусть переносится */
+.kpi-sub.wrap { white-space: normal; overflow: visible; text-overflow: clip; }
 
 /* ============================ GROUP CARDS (QUEUE) ============================ */
 
@@ -705,6 +711,8 @@ a { color: var(--accent); }
   font-size: 12.5px;
 }
 .group-error .ico { width: 14px; height: 14px; color: var(--err); }
+.group-error-hint { color: #8f1d1d; opacity: .85; }
+.group-error .src-link { color: inherit; font-weight: 650; }
 
 /* files section */
 .group-files-wrap { border-top: 1px solid #eef0f3; background: #fcfcfd; }
@@ -757,6 +765,22 @@ a { color: var(--accent); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* имя-ссылка: ведёт на страницу, откуда прилетела задача */
+.file-name-link,
+.cf-name-link {
+  text-decoration: none;
+  border-bottom: 1px dotted #c3cbd8;
+}
+.file-name-link:hover,
+.cf-name-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+.src-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
 }
 
 .file-status { min-width: 0; }
@@ -956,6 +980,22 @@ input[type="number"].input { font-variant-numeric: tabular-nums; }
   color: var(--err);
 }
 .cf-err .ico { width: 11px; height: 11px; flex: 0 0 auto; }
+.cf-note {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+.cf-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--warn);
+}
+.cf-hint .ico { width: 11px; height: 11px; flex: 0 0 auto; }
+.cf-hint .src-link { color: inherit; font-weight: 650; }
 
 .td-num {
   font-variant-numeric: tabular-nums;

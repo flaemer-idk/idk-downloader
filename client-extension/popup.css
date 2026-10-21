@@ -335,6 +335,111 @@ input[type="checkbox"]:checked::after {
   line-height: 1.5;
 }
 
+/* ======================= СПИСОК КАЧЕСТВ (свой, не <select>) =======================
+   Внутрь <option> бейдж «реально 480p» и вес не вставить, поэтому список рисуем
+   сами. Панель позиционирует popup.js: попап невысокий, и снизу список часто
+   не помещается — тогда он открывается вверх. */
+
+.qsel { position: relative; }
+.qsel-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+.qsel-btn:disabled { cursor: default; color: var(--muted-2); background: var(--info-tint); }
+.qsel-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.qsel-caret { color: var(--muted-2); }
+
+.qsel-list {
+  position: fixed;
+  z-index: 40;
+  min-width: 236px;
+  padding: 3px;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 10px 26px rgba(16, 24, 40, .16);
+  overflow-y: auto;
+}
+
+.q-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding: 0 7px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text-2);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.q-opt:hover { background: #f2f4f7; }
+.q-opt.on { background: var(--accent); color: #fff; }
+
+.q-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.q-star { flex: 0 0 auto; color: var(--warn); }
+.q-opt.on .q-star { color: #ffd88a; }
+
+/* «подкоробка» как в оригинале: что в файле на самом деле.
+   Цвет — сигнал: оранжевая, если реальное разрешение ниже подписи (то самое
+   «1080p», внутри которого 720p), зелёная — если выше. Совпало — подкоробки нет. */
+.q-real {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  background: var(--info-tint);
+  color: var(--muted);
+}
+.q-real.lower { background: var(--warn-tint); color: var(--warn); }
+.q-real.higher { background: var(--ok-tint); color: var(--ok); }
+.q-opt.on .q-real { background: rgba(255, 255, 255, .22); color: #fff; }
+
+.q-size {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.q-opt.on .q-size { color: #e8efff; }
+.q-size.pending { animation: q-pulse 1.2s ease-in-out infinite; }
+
+@keyframes q-pulse {
+  50% { opacity: .35; }
+}
+
+/* сколько серий уйдёт при текущем выборе «Что качать» */
+#range-note {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+#range-note:empty { display: none; }
+
+/* сбор ссылок: идёт на вкладке, попап только наблюдает */
+.collect { display: flex; align-items: center; gap: 8px; }
+.collect-text { flex: 1 1 auto; min-width: 0; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+
 /* ============================ КНОПКИ ============================ */
 
 .btn {
@@ -378,6 +483,15 @@ input[type="checkbox"]:checked::after {
   font-weight: 650;
 }
 .btn-armed:hover { background: #fbdedd !important; border-color: #eda2a2 !important; color: var(--err) !important; }
+
+/* «Всё равно скачать»: подтверждение при нехватке места — предупреждение, не ошибка */
+.btn-warn {
+  background: var(--warn) !important;
+  border-color: var(--warn) !important;
+  color: #fff !important;
+  font-weight: 650;
+}
+.btn-warn:hover { background: #b45309 !important; border-color: #b45309 !important; }
 
 .btn[disabled] { opacity: .45; pointer-events: none; }
 
@@ -466,6 +580,18 @@ input[type="checkbox"]:checked::after {
   line-height: 1.45;
 }
 
+/* Предупреждение «уже скачивалось» с кнопкой отмены этого фильма: текст
+   занимает свободное место, кнопка не сжимается и стоит по центру строки. */
+#already { align-items: center; }
+.warn-text { flex: 1 1 auto; }
+
+.sync-note {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted-2);
+  line-height: 1.45;
+}
+
 /* ============================ ОЧЕРЕДЬ ============================ */
 
 .queue-list { display: flex; flex-direction: column; }
@@ -486,6 +612,22 @@ input[type="checkbox"]:checked::after {
   color: var(--text-2);
   word-break: break-all;
   line-height: 1.4;
+}
+
+/* имя задачи-ссылка: ведёт на страницу, откуда она отправлена */
+.q-name-link {
+  display: block;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dotted #b9c9ea;
+}
+.q-name-link:hover { color: var(--accent-hover); border-bottom-color: var(--accent-hover); }
+
+/* «ссылка протухла»: подсказка под строкой статуса */
+.q-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--warn);
 }
 
 .q-bar { height: 5px; background: #e9ecf1; overflow: hidden; }
@@ -593,6 +735,7 @@ input[type="checkbox"]:checked::after {
 }
 .sw-dot.bad { background: var(--err); box-shadow: 0 0 0 2.5px var(--err-tint); }
 .sw-free { color: var(--text-2); font-weight: 650; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.sw-free.bad { color: var(--err); }
 .sw-path {
   font-family: var(--mono);
   font-size: 10.5px;

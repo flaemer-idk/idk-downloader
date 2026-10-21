@@ -65,9 +65,13 @@ async function worker() {
 }
 
 /** Куда класть файл: медиатека (если настроена) или папка загрузок. */
-function taskBaseDir(settings) {
+export function saveDir(settings = db.getSettings()) {
   const library = String(settings.library_dir ?? '').trim();
   return library || settings.download_dir;
+}
+
+function taskBaseDir(settings) {
+  return saveDir(settings);
 }
 
 async function processTask(task) {
@@ -406,9 +410,19 @@ function safeJsonArray(value) {
   }
 }
 
+/** Статусы, которые вообще можно отменить: идёт, ждёт, на паузе («error» — уже история). */
+const CANCELABLE_STATUSES = ['queued', 'downloading', 'paused'];
+
+/** .part-файлы задачи (обычный и временный .part.mp4 от HLS) — после отмены не нужны. */
+async function removePartFiles(baseDir, row) {
+  if (!row.filename) return;
+  await fsp.rm(`${path.join(baseDir, row.filename)}.${row.id}.part`, { force: true }).catch(() => {});
+  await fsp.rm(`${path.join(baseDir, row.filename)}.${row.id}.part.mp4`, { force: true }).catch(() => {});
+}
+
 /** Отменяет всё, что стоит в очереди, качается или на паузе. */
 export async function cancelAll() {
-  const rows = db.listTaskRowsByStatuses(['queued', 'downloading', 'paused']);
+  const rows = db.listTaskRowsByStatuses(CANCELABLE_STATUSES);
   const baseDir = taskBaseDir(db.getSettings());
 
   for (const row of rows) {
@@ -419,13 +433,35 @@ export async function cancelAll() {
       continue;
     }
     db.updateTask(row.id, { status: 'canceled', received_bytes: 0, finished_at: Date.now() });
-    if (row.filename) {
-      await fsp.rm(`${path.join(baseDir, row.filename)}.${row.id}.part`, { force: true }).catch(() => {});
-      await fsp.rm(`${path.join(baseDir, row.filename)}.${row.id}.part.mp4`, { force: true }).catch(() => {});
-    }
+    await removePartFiles(baseDir, row);
   }
 
   if (rows.length > 0) log.warn(`Отменены все задачи: ${rows.length}`);
+  return rows.length;
+}
+
+/**
+ * Отменяет незаконченные задачи одного фильма — кнопка в попапе «этот фильм уже
+ * качается, отменить»: искать его строки в общей очереди не приходится.
+ * Готовые файлы и история не трогаются, отменённые задачи в очереди можно
+ * вернуть кнопкой «Повторить».
+ */
+export async function cancelMovie(movieId) {
+  const rows = db.listTaskRowsByMovie(movieId, CANCELABLE_STATUSES);
+  const baseDir = taskBaseDir(db.getSettings());
+
+  for (const row of rows) {
+    const entry = active.get(row.id);
+    if (entry) {
+      entry.mode = 'cancel';
+      entry.controller.abort();
+      continue;
+    }
+    db.updateTask(row.id, { status: 'canceled', received_bytes: 0, finished_at: Date.now() });
+    await removePartFiles(baseDir, row);
+  }
+
+  if (rows.length > 0) log.warn(`Отменены задачи фильма ${movieId}: ${rows.length}`);
   return rows.length;
 }
 

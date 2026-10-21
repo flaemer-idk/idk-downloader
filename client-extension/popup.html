@@ -38,6 +38,7 @@
             <span class="field-label">Токен <span class="opt">(если включён на сервере)</span></span>
             <input id="server-token" class="input mono" type="text" placeholder="необязательно" spellcheck="false" autocomplete="off" />
           </label>
+          <div class="sync-note">Адрес и токен синхронизируются между браузерами, где включён вход в профиль (storage.sync).</div>
         </div>
         <div class="card-foot">
           <button id="save-settings" class="btn btn-primary" type="button">Сохранить</button>
@@ -49,20 +50,34 @@
         <div id="page-info" class="card-body page-info">Определяем страницу…</div>
       </section>
 
-      <div id="already" class="warn-line hidden"></div>
+      <div id="already" class="warn-line hidden">
+        <span id="already-text" class="warn-text"></span>
+        <!-- «этот фильм уже качается»: отмена без поиска его строк в очереди -->
+        <button id="cancel-movie" class="btn btn-sm hidden" type="button" title="Отменить незаконченные задачи этого фильма на сервере (готовые файлы не трогаются)">Отменить этот фильм</button>
+      </div>
 
       <section id="controls" class="card hidden">
         <div class="card-body">
           <div class="two-col">
             <label class="field">Озвучка<select id="voiceover" class="input"></select></label>
-            <label class="field">Качество<select id="quality" class="input"></select></label>
+            <div class="field">
+              <span class="field-label" id="quality-label">Качество</span>
+              <div class="qsel" id="quality-sel">
+                <button type="button" class="input qsel-btn" id="quality-btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="quality-label">
+                  <span class="qsel-text" id="quality-text"></span>
+                  <svg class="ico qsel-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="qsel-list hidden" id="quality-list" role="listbox" aria-labelledby="quality-label"></div>
+              </div>
+              <!-- источник значения: рисуем свой список (в <option> бейдж не вставить) -->
+              <select id="quality" class="hidden" tabindex="-1" aria-hidden="true"></select>
+            </div>
           </div>
 
-          <div class="subs-row">
+          <div class="subs-row hidden" id="subs-row">
             <label class="field-check"><input type="checkbox" id="subs-enabled" /> Скачивать субтитры</label>
             <button id="download-subs" class="btn btn-sm" type="button" title="Отправить на сервер только субтитры выбранных серий — удобно, если видео уже скачано">Только субтитры</button>
           </div>
-          <div id="subs-note" class="hint hidden"></div>
           <label class="field hidden" id="subs-lang-wrap">
             <span class="field-label">Язык субтитров</span>
             <select id="subs-lang" class="input"></select>
@@ -72,12 +87,13 @@
             <label class="field">
               <span class="field-label">Что качать</span>
               <select id="range-mode" class="input">
-                <option value="current">Текущую серию</option>
-                <option value="season">Все серии текущего сезона</option>
                 <option value="all">Весь сериал</option>
+                <option value="season">Все серии текущего сезона</option>
+                <option value="current">Текущую серию</option>
                 <option value="custom">Выбрать серии…</option>
               </select>
             </label>
+            <div id="range-note"></div>
 
             <div id="range-custom" class="hidden">
               <div class="season-tabs" id="season-tabs"></div>
@@ -92,9 +108,15 @@
           </div>
         </div>
         <div class="card-foot stack">
+          <div id="collect" class="collect hidden">
+            <span id="collect-text" class="collect-text"></span>
+            <button id="collect-cancel" class="btn btn-sm hidden" type="button" title="Прервать сбор ссылок">Отменить</button>
+          </div>
+          <!-- «партия не влезет на диск сервера»: показывается до отправки -->
+          <div id="space-warn" class="warn-line hidden"></div>
           <button id="download" class="btn btn-primary btn-block" type="button">
             <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Скачать на сервер</span>
+            <span id="download-label">Скачать на сервер</span>
           </button>
           <div id="action-status" class="status-line"></div>
         </div>
@@ -126,6 +148,8 @@
       </div>
     </div>
 
+    <script src="defaults.js"></script>
+    <script src="media-probe.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

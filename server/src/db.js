@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
+import { UNFINISHED_STATUSES } from './estimate.js';
 
 const DEFAULT_SETTINGS = {
   download_dir: config.defaultDownloadDir,
@@ -100,6 +101,8 @@ function initDb(db) {
       file_type       TEXT    NOT NULL DEFAULT 'video',
       subtitle_lang   TEXT,
       subtitle_lang_code TEXT,
+      real_width      INTEGER,
+      real_height     INTEGER,
       total_bytes     INTEGER NOT NULL DEFAULT 0,
       received_bytes  INTEGER NOT NULL DEFAULT 0,
       attempts        INTEGER NOT NULL DEFAULT 0,
@@ -125,6 +128,8 @@ function initDb(db) {
     ['year', 'TEXT'],
     ['subtitle_lang_code', 'TEXT'],
     ['queue_hidden', 'INTEGER NOT NULL DEFAULT 0'],
+    ['real_width', 'INTEGER'],
+    ['real_height', 'INTEGER'],
   ]) {
     if (!columns.includes(name)) db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${type}`);
   }
@@ -178,6 +183,8 @@ const TASK_COLUMNS = [
   'file_type',
   'subtitle_lang',
   'subtitle_lang_code',
+  'real_width',
+  'real_height',
   'total_bytes',
   'received_bytes',
   'attempts',
@@ -234,6 +241,8 @@ export function createTask(input) {
     file_type: input.file_type === 'subtitle' ? 'subtitle' : 'video',
     subtitle_lang: input.subtitle_lang,
     subtitle_lang_code: input.subtitle_lang_code,
+    real_width: input.real_width,
+    real_height: input.real_height,
     total_bytes: Number(input.total_bytes) || 0,
     received_bytes: 0,
     attempts: 0,
@@ -271,6 +280,16 @@ export function listTaskRowsByStatuses(statuses) {
   ).all(...statuses);
 }
 
+/** Тот же список, но по одному фильму — для отмены «этого фильма» из попапа. */
+export function listTaskRowsByMovie(movieId, statuses) {
+  if (!statuses.length) return [];
+  const placeholders = statuses.map(() => '?').join(', ');
+  return q(
+    `SELECT id, filename, status FROM tasks
+     WHERE movie_id = ? AND status IN (${placeholders}) ORDER BY id`,
+  ).all(String(movieId), ...statuses);
+}
+
 export function getTask(id) {
   return q('SELECT * FROM tasks WHERE id = ?').get(id);
 }
@@ -294,6 +313,23 @@ export function updateTask(id, patch) {
   if (keys.length === 0) return;
   const sql = `UPDATE tasks SET ${keys.map((key) => `${key} = ?`).join(', ')} WHERE id = ?`;
   q(sql).run(...keys.map((key) => normalizeValue(patch[key])), id);
+}
+
+/**
+ * Вход для оценки свободного места (см. estimate.js): берём ВСЕ незаконченные
+ * задачи (не только первые 300 из listTasks) и веса уже скачанного — по ним
+ * считается средний вес, когда у задачи он неизвестен.
+ */
+export function spaceInput() {
+  const placeholders = UNFINISHED_STATUSES.map(() => '?').join(', ');
+  const unfinished = q(
+    `SELECT status, file_type, movie_id, title, total_bytes, received_bytes
+     FROM tasks WHERE status IN (${placeholders})`,
+  ).all(...UNFINISHED_STATUSES);
+  const doneSizes = q(
+    `SELECT movie_id, title, total_bytes FROM tasks WHERE status = 'done' AND total_bytes > 0`,
+  ).all();
+  return { unfinished, doneSizes };
 }
 
 export function deleteTask(id) {
@@ -398,6 +434,8 @@ export function serializeTask(row) {
     fileType: row.file_type,
     subtitleLang: row.subtitle_lang,
     subtitleLangCode: row.subtitle_lang_code,
+    realWidth: row.real_width ?? null,
+    realHeight: row.real_height ?? null,
     totalBytes: row.total_bytes,
     receivedBytes: row.received_bytes,
     attempts: row.attempts,

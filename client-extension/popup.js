@@ -6,7 +6,10 @@
 
 const ext = globalThis.browser ?? globalThis.chrome;
 const $ = (selector) => document.querySelector(selector);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Настройки: адрес и токен — в storage.sync, чтобы переезжали с профилем;
+ *  в storage.local остаётся та же копия (синхронизация может быть выключена). */
 const STORAGE_KEY = 'hdzg-server-settings';
 const UI_KEY = 'hdzg-server-ui';
 const STATUS_LABELS = {
@@ -34,6 +37,9 @@ const state = {
   settings: { serverUrl: '', token: '' },
   tab: null,
   page: null,
+  // последний ответ /api/state: нужен для проверки свободного места
+  server: null,
+  spaceWarn: null,
   voiceovers: [],
   resolveCache: new Map(), // ключ параметров → ответ сайта
   seasons: {},
@@ -44,6 +50,15 @@ const state = {
   // ручной выбор серий (режим «Выбрать серии…»)
   selectedEpisodes: new Set(), // ключи вида "сезон:серия"
   activeSeason: null,
+  // проба качеств: вес файла и реальное разрешение (см. media-probe.js)
+  probeInfo: {}, // «1080p» → {size, width, height, source}
+  probePending: new Set(),
+  probeToken: 0, // пробы прошлой озвучки становятся неактуальны
+  // серии всех сезонов (ответ action=get_episodes)
+  episodesLoaded: false,
+  episodesLoad: null,
+  // субтитры: пока пользователь не трогал галочку/язык — базовые значения
+  subsTouched: false,
   // состояние интерфейса
   queueCollapsed: false,
   queueBusy: false,
@@ -55,10 +70,13 @@ const state = {
 /* ─────────────────────────── настройки и сервер ─────────────────────────── */
 
 async function loadSettings() {
-  const stored = await ext.storage.local.get([STORAGE_KEY, UI_KEY]);
-  state.settings = { ...state.settings, ...(stored[STORAGE_KEY] || {}) };
+  const [stored, uiStored] = await Promise.all([
+    readStoredSettings(),
+    ext.storage.local.get(UI_KEY).catch(() => ({})),
+  ]);
+  state.settings = { ...state.settings, ...(stored || {}) };
 
-  const ui = stored[UI_KEY] || {};
+  const ui = uiStored[UI_KEY] || {};
   state.queueCollapsed = Boolean(ui.queueCollapsed);
   applyQueueCollapsed();
 
@@ -68,6 +86,34 @@ async function loadSettings() {
   updateConnSub(false);
 }
 
+function syncArea() {
+  try {
+    return ext.storage.sync ?? null;
+  } catch {
+    return null; // очень старый браузер — остаёмся на storage.local
+  }
+}
+
+/**
+ * Читает настройки из sync и local и берёт более свежую копию (updatedAt).
+ * Так первая версия с sync сама мигрирует старые значения из local, а две
+ * копии не «перетягивают» друг друга при обычной работе.
+ */
+async function readStoredSettings() {
+  const areas = [syncArea(), ext.storage.local].filter(Boolean);
+  const copies = [];
+  for (const area of areas) {
+    try {
+      const value = (await area.get(STORAGE_KEY))?.[STORAGE_KEY];
+      if (value && typeof value === 'object') copies.push(value);
+    } catch {
+      // приватный режим или нет разрешения — просто пропускаем это хранилище
+    }
+  }
+  copies.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+  return copies[0] || null;
+}
+
 async function saveSettings() {
   const previousUrl = state.settings.serverUrl;
 
@@ -75,7 +121,7 @@ async function saveSettings() {
     serverUrl: $('#server-url').value.trim().replace(/\/+$/, ''),
     token: $('#server-token').value.trim(),
   };
-  await ext.storage.local.set({ [STORAGE_KEY]: state.settings });
+  await writeStoredSettings(state.settings);
   $('#settings-status').textContent = 'Сохранено';
   setTimeout(() => ($('#settings-status').textContent = ''), 2000);
   updateConnSub(false);
@@ -84,6 +130,20 @@ async function saveSettings() {
   // Адрес появился или сменился — только теперь имеет смысл читать страницу.
   if (state.settings.serverUrl !== previousUrl) init();
   refreshQueue();
+}
+
+/** Пишет настройки в sync и local; ошибку синхронизации не считаем сбоем. */
+async function writeStoredSettings(settings) {
+  const value = { ...settings, updatedAt: Date.now() };
+  const writes = [ext.storage.local.set({ [STORAGE_KEY]: value })];
+  const sync = syncArea();
+  if (sync) writes.push(sync.set({ [STORAGE_KEY]: value }));
+  const results = await Promise.allSettled(writes);
+  if (results[0].status === 'rejected') {
+    // без рабочего local настройки не сохранить — это уже настоящая ошибка
+    throw results[0].reason;
+  }
+  return value;
 }
 
 async function serverApi(path, options = {}) {
@@ -425,6 +485,95 @@ async function runInPage(func, args = []) {
   return first.result;
 }
 
+/**
+ * Сбор ссылок по сериям — цикл живёт на самой вкладке (MAIN world), поэтому
+ * попап можно закрыть: работа продолжится, а при следующем открытии попап
+ * подхватит результат (см. resumeCollectJob). Прогресс и ответы сайта лежат
+ * в window.__hdzgJob, туда же попап пишет отмену.
+ *
+ * Функция уходит в executeScript целиком и потому ни на что снаружи не
+ * ссылается: запрос к сайту здесь свой (такой же, как в pageResolve).
+ * Ожидаемая партия (window.__hdzgJob) создаётся попапом до запуска — по её id
+ * проверяем, что собираем именно её.
+ */
+async function pageCollectLinks(job) {
+  const progress = window.__hdzgJob;
+  if (!progress || progress.id !== job.id) return; // попап уже начал другую партию
+
+  const key = (episode) => (episode ? `${episode.season}:${episode.episode}` : 'film');
+
+  const request = async (episode) => {
+    const body = new URLSearchParams();
+    body.set('id', job.movie.id);
+    body.set('translator_id', job.movie.translator_id);
+    body.set('favs', job.movie.favs || '');
+    if (episode) {
+      body.set('season', episode.season);
+      body.set('episode', episode.episode);
+      body.set('action', 'get_stream');
+    } else {
+      body.set('is_camrip', job.movie.is_camrip ?? '');
+      body.set('is_ads', job.movie.is_ads ?? '');
+      body.set('is_director', job.movie.is_director ?? '');
+      body.set('action', 'get_movie');
+    }
+
+    const url = new URL('/ajax/get_cdn_series/', location.origin);
+    url.searchParams.set('t', String(Date.now()));
+    const response = await fetch(url.toString(), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: body.toString(),
+    });
+
+    const text = await response.text();
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+    if (!data) throw new Error(`Ответ не JSON (HTTP ${response.status}): ${text.slice(0, 120)}`);
+    if (data.success === false) throw new Error(data.message || 'Сайт вернул ошибку');
+    return data;
+  };
+
+  for (const episode of job.episodes) {
+    if (window.__hdzgJob !== progress) return; // партию сменили
+    if (progress.canceled) {
+      progress.status = 'canceled';
+      break;
+    }
+
+    try {
+      const data = await request(episode);
+      progress.results[key(episode)] = {
+        ok: true,
+        url: data.url ?? null,
+        subtitle: data.subtitle ?? null,
+        subtitle_lns: data.subtitle_lns ?? null,
+        message: null,
+      };
+    } catch (error) {
+      progress.results[key(episode)] = {
+        ok: false,
+        message: String(error?.message || error),
+      };
+    }
+
+    progress.done++;
+    // Пауза между сериями: не долбим сайт пачкой.
+    if (job.episodes.length > 1) await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+
+  if (progress.status === 'running') progress.status = 'done';
+  progress.finishedAt = Date.now();
+}
+
 /* ──────────────────────────── парсеры ответа сайта ──────────────────────── */
 
 function clearTrash(data) {
@@ -447,15 +596,8 @@ function parseQualityLabel(raw) {
   return prem ? prem[1] : raw;
 }
 
-function qualityWeight(quality) {
-  const match = String(quality).match(/^(\d+)([pK])/i);
-  if (!match) return 0;
-  const value = parseInt(match[1], 10);
-  const unit = match[2].toLowerCase();
-  let rank = unit === 'k' ? value * 630 : value;
-  if (String(quality).toLowerCase().includes('ultra')) rank++;
-  return rank;
-}
+// Вес и высота качества, выбор качества по умолчанию и озвучки — в defaults.js
+// (HdzgDefaults): это чистые функции над подписями, их проверяют тесты.
 
 function decodeVideoURL(stream) {
   if (!stream) return {};
@@ -482,12 +624,14 @@ function decodeVideoURL(stream) {
   return result;
 }
 
+// Как и в media-probe.js: ссылка с параметрами (…mp4?token=…) — тоже mp4,
+// иначе проба показала бы вес качества, которое потом нечем скачать.
 function isMp4Url(url) {
-  return /^https?:\/\/.*\.mp4$/i.test(url);
+  return /^https?:\/\/.*\.mp4(\?|$)/i.test(url);
 }
 
 function isM3u8Url(url) {
-  return /^https?:\/\/.*\.m3u8$/i.test(url);
+  return /^https?:\/\/.*\.m3u8(\?|$)/i.test(url);
 }
 
 function decodeSubtitles(data) {
@@ -548,19 +692,6 @@ function selectedEpisodeList() {
     .sort((a, b) => parseInt(a.season) - parseInt(b.season) || parseInt(a.episode) - parseInt(b.episode));
 }
 
-function pickQuality(qualities, wanted) {
-  const keys = Object.keys(qualities);
-  if (keys.length === 0) return null;
-  if (qualities[wanted]) return wanted;
-
-  const target = qualityWeight(wanted);
-  const sorted = keys.slice().sort((a, b) => qualityWeight(b) - qualityWeight(a));
-  for (const key of sorted) {
-    if (qualityWeight(key) <= target) return key;
-  }
-  return null;
-}
-
 /* ─────────────────────────────── интерфейс ─────────────────────────────── */
 
 function setPageInfo(html, isError = false) {
@@ -595,31 +726,293 @@ function renderVoiceovers() {
   select.disabled = state.voiceovers.length <= 1;
 }
 
+function voiceoverTitle(id) {
+  const voice = state.voiceovers.find((item) => String(item.id) === String(id));
+  return voice?.title ?? String(id);
+}
+
+/**
+ * Ставит озвучке страницы выбранный id. Для фильмов переставляет ещё и флаги
+ * camrip/ads/director: у каждой озвучки они свои, и запрос без них вернул бы
+ * файл чужого перевода.
+ */
+function applyVoiceover(id) {
+  const movie = state.page?.movie;
+  const selected = state.voiceovers.find((voice) => String(voice.id) === String(id));
+  if (!movie || !selected) return false;
+
+  movie.translator_id = String(selected.id);
+  if (movie.action === 'get_movie') {
+    movie.is_camrip = selected.is_camrip || null;
+    movie.is_ads = selected.is_ads || null;
+    movie.is_director = selected.is_director || null;
+  }
+  return true;
+}
+
+/** У озвучки нет ссылок вовсе (так бывает, если она озвучила не все серии). */
+function hasNoLinks(data) {
+  return Object.keys(decodeVideoURL(data?.url)).length === 0;
+}
+
+/* ─────────────────────── выбор качества (свой список) ───────────────────────
+   Нативный <select> не умеет показывать бейдж и вес внутри строки, поэтому
+   список рисуем сами. <select id="quality"> остаётся скрытым источником
+   значения — по нему собираются задачи. */
+
+/** Кодеки для подсказки: что внутри, кроме разрешения. */
+const CODEC_LABELS = {
+  avc1: 'H.264',
+  avc3: 'H.264',
+  hvc1: 'HEVC',
+  hev1: 'HEVC',
+  av01: 'AV1',
+  vp09: 'VP9',
+  mp4v: 'MPEG-4',
+};
+
+/**
+ * Насколько реальное разрешение расходится с подписью. Подписи на hdrezka
+ * врут в обе стороны: «1080p» вполне может быть 720p, а «1080p Ultra» —
+ * честными 1080p, причём это разные файлы.
+ */
+function resolutionVerdict(key, probe) {
+  const claimed = HdzgDefaults.claimedHeight(key);
+  if (!claimed || !probe?.height) return 'same';
+  if (probe.height < claimed * 0.95) return 'lower';
+  if (probe.height > claimed * 1.05) return 'higher';
+  return 'same';
+}
+
+/** Реальное разрешение для «подкоробки»: null — если совпало с подписью или неизвестно. */
+function realResolutionLabel(key, probe) {
+  if (!probe?.height) return null;
+  // Подпись без числа («SD»): сравнивать не с чем, но реальное разрешение полезно.
+  if (HdzgDefaults.claimedHeight(key) === null) return `${probe.height}p`;
+  // Как в оригинальном расширении: совпало — подкоробка не нужна.
+  return resolutionVerdict(key, probe) === 'same' ? null : `${probe.height}p`;
+}
+
+/** Подсказка строки: что именно лежит в файле (доступна у любого качества). */
+function qualityTooltip(key, probe) {
+  if (!probe) {
+    // Такие качества не пробуем (см. HdzgDefaults.shouldProbe) — говорим прямо,
+    // иначе пустая строка выглядит как «вес ещё не пришёл».
+    return HdzgDefaults.shouldProbe(key) ? '' : 'Вес и разрешение не пробуем: качество ниже 720p';
+  }
+  const parts = [];
+  if (probe.width && probe.height) parts.push(`В файле ${probe.width}×${probe.height}`);
+  if (CODEC_LABELS[probe.codec]) parts.push(CODEC_LABELS[probe.codec]);
+  if (probe.size) parts.push(formatBytes(probe.size));
+  if (probe.source === 'hls') parts.push('вес примерный (HLS)');
+
+  const verdict = resolutionVerdict(key, probe);
+  if (verdict === 'lower') parts.push('меньше заявленного');
+  else if (verdict === 'higher') parts.push('больше заявленного');
+
+  return parts.join(' · ');
+}
+
+/** Строка качества: имя, звёздочка премиума, подкоробка с реальным разрешением, вес. */
+function qualityRowHtml(key, quality) {
+  const probe = state.probeInfo[key];
+  const pending = state.probePending.has(key);
+  const real = pending ? null : realResolutionLabel(key, probe);
+  const size = probe?.size ? formatBytes(probe.size) : pending ? '…' : '';
+  const verdict = real ? resolutionVerdict(key, probe) : 'same';
+
+  return (
+    `<span class="q-name">${escapeHtml(key)}</span>` +
+    (quality?.isPrem ? '<span class="q-star" title="премиум">★</span>' : '') +
+    (real ? `<span class="q-real ${verdict}">${escapeHtml(real)}</span>` : '') +
+    (size ? `<span class="q-size${pending ? ' pending' : ''}">${escapeHtml(size)}</span>` : '')
+  );
+}
+
+/** Обновляет строку целиком: разметка + подсказка с полным разрешением. */
+function updateQualityRow(row, key, quality) {
+  row.innerHTML = qualityRowHtml(key, quality);
+  row.title = qualityTooltip(key, state.probeInfo[key]);
+}
+
+/**
+ * Список качеств и запуск пробы. Проба асинхронная: строки сначала появляются
+ * без веса, а по мере ответов обновляются (см. probeQualities).
+ */
 function renderQualities() {
   const select = $('#quality');
-  select.innerHTML = '';
+  const list = $('#quality-list');
   const qualities = state.resolved?.qualities ?? {};
-  const keys = Object.keys(qualities).sort((a, b) => qualityWeight(b) - qualityWeight(a));
+  const keys = HdzgDefaults.sortQualities(Object.keys(qualities));
+  // Вес и разрешение ищем не у всех: качества ниже 720p — мусор (см. defaults.js).
+  const probed = keys.filter((key) => HdzgDefaults.shouldProbe(key));
+
+  // Пробы относятся к конкретным ссылкам: при смене озвучки старые не годятся.
+  state.probeToken++;
+  state.probeInfo = {};
+  state.probePending = new Set();
+
+  select.innerHTML = '';
+  list.innerHTML = '';
+
   for (const key of keys) {
     const option = document.createElement('option');
     option.value = key;
-    option.textContent = key + (qualities[key].isPrem ? ' ★ (премиум)' : '');
     select.appendChild(option);
+
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'q-opt';
+    row.dataset.value = key;
+    row.setAttribute('role', 'option');
+    updateQualityRow(row, key, qualities[key]);
+    list.appendChild(row);
   }
-  const pageQuality = state.page?.quality;
-  if (pageQuality && keys.includes(pageQuality)) select.value = pageQuality;
-  if (!keys.length) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = '— нет доступных качеств —';
-    select.appendChild(option);
+
+  // Качество по умолчанию — не то, что стоит в плеере: «1080p Ultra», иначе
+  // «1080p» (см. HdzgDefaults.pickDefaultQuality).
+  select.value = HdzgDefaults.pickDefaultQuality(qualities) ?? keys[0] ?? '';
+
+  const empty = keys.length === 0;
+  select.disabled = empty;
+  $('#quality-btn').disabled = empty;
+  closeQualityList();
+  syncQualityButton();
+  markSelectedQualityRow();
+  probeQualities(qualities, probed);
+}
+
+function syncQualityButton() {
+  const key = $('#quality').value;
+  const button = $('#quality-btn');
+  const quality = state.resolved?.qualities?.[key];
+
+  if (!key) {
+    $('#quality-text').innerHTML = '<span class="q-name">— нет доступных качеств —</span>';
+    button.title = '';
+    return;
   }
+
+  $('#quality-text').innerHTML = qualityRowHtml(key, quality);
+  button.title = qualityTooltip(key, state.probeInfo[key]);
+}
+
+function markSelectedQualityRow() {
+  const key = $('#quality').value;
+  for (const row of $('#quality-list').querySelectorAll('.q-opt')) {
+    const on = row.dataset.value === key;
+    row.classList.toggle('on', on);
+    row.setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+}
+
+/** Перерисовка строк после ответа пробы (строки не пересоздаём — теряется фокус). */
+function refreshQualityLabels() {
+  const qualities = state.resolved?.qualities ?? {};
+  for (const row of $('#quality-list').querySelectorAll('.q-opt')) {
+    updateQualityRow(row, row.dataset.value, qualities[row.dataset.value]);
+  }
+  syncQualityButton();
+}
+
+/**
+ * Проба качеств: вес и реальное разрешение. keys — только те, что стоит
+ * пробовать (720p и выше, см. HdzgDefaults.shouldProbe): каждая проба — это
+ * Range-запрос к CDN, и на 360p/144p его тратить незачем. Все пробы идут
+ * параллельно (как в оригинальном расширении) — ссылки, которые повторяются
+ * у нескольких качеств, модуль склеивает в один запрос сам (см. media-probe.js).
+ */
+async function probeQualities(qualities, keys) {
+  const pageUrl = state.page?.url;
+  if (!pageUrl || !keys.length) return;
+
+  const token = state.probeToken;
+  state.probePending = new Set(keys);
+  refreshQualityLabels();
+
+  await Promise.all(
+    keys.map(async (key) => {
+      let info = null;
+      try {
+        info = await HdzgProbe.probeQuality(qualities[key]?.urls ?? [], { pageUrl });
+      } catch {
+        info = null; // без веса качество всё равно можно выбрать
+      }
+
+      if (token !== state.probeToken) return;
+      state.probeInfo[key] = info;
+      state.probePending.delete(key);
+      refreshQualityLabels();
+    }),
+  );
+
+  if (token !== state.probeToken) return;
+  state.probePending.clear();
+  refreshQualityLabels();
+  renderSpaceWarn(); // вес выбранного качества мог появиться только сейчас
+}
+
+/* панель списка: position: fixed, координаты считаем сами (иначе обрежется
+   краем попапа — он низкий, а список из пяти качеств вниз не влезает) */
+
+function isQualityListOpen() {
+  return !$('#quality-list').classList.contains('hidden');
+}
+
+function positionQualityList() {
+  const list = $('#quality-list');
+  const rect = $('#quality-btn').getBoundingClientRect();
+  const gap = 5;
+  const margin = 6;
+  const width = Math.max(rect.width, 236);
+
+  list.style.width = `${width}px`;
+  const height = Math.min(list.scrollHeight, window.innerHeight - margin * 2);
+
+  let top = rect.bottom + gap;
+  if (top + height > window.innerHeight - margin) {
+    const above = rect.top - gap - height;
+    top = above >= margin ? above : Math.max(margin, window.innerHeight - margin - height);
+  }
+
+  const left = Math.min(Math.max(margin, rect.right - width), window.innerWidth - margin - width);
+  list.style.top = `${Math.round(top)}px`;
+  list.style.left = `${Math.round(left)}px`;
+  list.style.maxHeight = `${Math.round(height)}px`;
+}
+
+function openQualityList() {
+  const list = $('#quality-list');
+  if (!list.querySelector('.q-opt')) return;
+  list.classList.remove('hidden');
+  $('#quality-btn').setAttribute('aria-expanded', 'true');
+  positionQualityList();
+  markSelectedQualityRow();
+  (list.querySelector('.q-opt.on') ?? list.querySelector('.q-opt'))?.focus();
+}
+
+function closeQualityList() {
+  $('#quality-list').classList.add('hidden');
+  $('#quality-btn').setAttribute('aria-expanded', 'false');
+}
+
+function toggleQualityList() {
+  if (isQualityListOpen()) closeQualityList();
+  else openQualityList();
+}
+
+function selectQuality(key) {
+  $('#quality').value = key;
+  syncQualityButton();
+  markSelectedQualityRow();
+  renderSpaceWarn(); // у качеств разный вес — пересчитываем оценку места
 }
 
 function renderSubtitles() {
   const langs = state.resolved?.subtitles ?? [];
-  const wrap = $('#subs-lang-wrap');
   const select = $('#subs-lang');
+  const wrap = $('#subs-lang-wrap');
+  const previous = select.value;
 
   select.innerHTML = '';
   for (const item of langs) {
@@ -629,20 +1022,24 @@ function renderSubtitles() {
     select.appendChild(option);
   }
 
-  const hasSubs = langs.length > 0;
-  // Чекбокс не блокируем: субтитры могут появиться при смене озвучки,
-  // а при их отсутствии пользователь должен видеть, что галочка просто не сработает.
-  $('#subs-enabled').disabled = false;
-  if (!hasSubs && state.subsWasChecked) $('#subs-enabled').checked = false;
-  wrap.classList.toggle('hidden', !hasSubs || !$('#subs-enabled').checked);
+  // Язык: русский по умолчанию, но выбор пользователя не перебиваем, пока он
+  // есть у этой озвучки (у разных озвучек набор субтитров свой).
+  const keepPrevious = state.subsTouched && langs.some((item) => item.lang === previous);
+  const russian = HdzgDefaults.pickSubtitleLang(langs);
+  select.value = keepPrevious ? previous : (russian ?? langs[0]?.lang ?? '');
 
-  const note = $('#subs-note');
-  if (note) {
-    note.textContent = hasSubs
-      ? ''
-      : 'Для этой озвучки субтитры не найдены — попробуйте другую озвучку.';
-    note.classList.toggle('hidden', hasSubs);
+  // У этой озвучки субтитров нет — про них и не говорим: ряд скрыт целиком,
+  // галочка снята, чтобы задача на субтитры не ушла случайно.
+  const hasSubs = langs.length > 0;
+  $('#subs-row').classList.toggle('hidden', !hasSubs);
+  if (!hasSubs) {
+    $('#subs-enabled').checked = false;
+  } else if (!state.subsTouched) {
+    // Базовое значение: качаем субтитры и берём русские (см. defaults.js).
+    // Русских нет — галочку не ставим: украинские к русской озвучке не нужны.
+    $('#subs-enabled').checked = russian !== null;
   }
+  wrap.classList.toggle('hidden', !hasSubs || !$('#subs-enabled').checked);
 }
 
 function renderSeasons() {
@@ -667,6 +1064,64 @@ function renderSeasons() {
   }
 
   renderEpisodeGrid();
+  updateRangeNote();
+  prefetchAllEpisodes();
+}
+
+/** Русское склонение: 1 серия, 2 серии, 5 серий. */
+function plural(count, forms) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return forms[1];
+  return forms[2];
+}
+
+/** Сколько серий уйдёт при текущем выборе «Что качать». */
+function updateRangeNote() {
+  const el = $('#range-note');
+  const page = state.page;
+  if (!page || page.pageType !== 'SERIAL') {
+    el.textContent = '';
+    return;
+  }
+
+  const mode = $('#range-mode').value;
+  const countEpisodes = (seasonKey) => (state.seasons[seasonKey]?.episodes ?? []).length;
+  const episodesWord = (count) => plural(count, ['серия', 'серии', 'серий']);
+
+  if (mode === 'current') {
+    el.textContent = page.movie.episode
+      ? `К отправке: серия ${page.movie.episode}`
+      : 'Не удалось определить текущую серию — выберите другой вариант';
+    return;
+  }
+  if (mode === 'custom') {
+    el.textContent = ''; // в сетке серий свой счётчик
+    return;
+  }
+
+  if (mode === 'season') {
+    const count = countEpisodes(String(page.movie.season));
+    el.textContent = count
+      ? `К отправке: ${count} ${episodesWord(count)} (сезон ${page.movie.season})`
+      : 'Серии подтянутся при отправке';
+    return;
+  }
+
+  const keys = seasonKeys();
+  const total = keys.reduce((sum, key) => sum + countEpisodes(key), 0);
+  const seasons = keys.filter((key) => countEpisodes(key)).length;
+
+  if (!total) {
+    el.textContent = 'Серии подтянутся при отправке';
+    return;
+  }
+  // Пока сайт не отдал остальные сезоны, счётчик честно об этом говорит.
+  el.textContent =
+    `К отправке: ${total} ${episodesWord(total)} ` +
+    `(${seasons} ${plural(seasons, ['сезон', 'сезона', 'сезонов'])})` +
+    (state.episodesLoaded ? '' : ' — список ещё уточняется');
 }
 
 /** Сезоны-табы и сетка чипов для режима «Выбрать серии…». */
@@ -708,8 +1163,9 @@ function renderEpisodeGrid() {
 function updateEpisodeSummary() {
   const count = state.selectedEpisodes.size;
   const el = $('#ep-summary');
-  const word = count === 1 ? 'серия' : count > 1 && count < 5 ? 'серии' : 'серий';
-  el.textContent = count ? `Выбрано: ${count} ${word}` : 'Ничего не выбрано';
+  el.textContent = count
+    ? `Выбрано: ${count} ${plural(count, ['серия', 'серии', 'серий'])}`
+    : 'Ничего не выбрано';
   el.classList.toggle('bad', count === 0);
 }
 
@@ -745,6 +1201,25 @@ function queueButtons(task) {
     .join('')}</span>`;
 }
 
+/** Страница, откуда отправлена задача (расширение кладёт её в referer).
+ *  По ней берут свежую ссылку, когда старая протухла: сервер сам не может —
+ *  у него нет сессии сайта, а вкладку пользователь закрывает. */
+function taskSourceUrl(task) {
+  const referer = String(task.referer || '').trim();
+  if (!/^https?:\/\//i.test(referer)) return null;
+  try {
+    if (new URL(referer).host === new URL(task.url).host) return null; // это сам CDN
+  } catch {
+    return null;
+  }
+  return referer;
+}
+
+/** Подписанные ссылки hdrezka живут часами: 403/404 у задачи — обычно именно это. */
+function looksExpired(task) {
+  return !!taskSourceUrl(task) && /\b4\d\d\b/.test(String(task.error || ''));
+}
+
 function renderQueue(stateData) {
   const stats = stateData?.stats;
   $('#queue-stats').textContent = stats
@@ -771,15 +1246,26 @@ function renderQueue(stateData) {
           : task.receivedBytes > 0
             ? formatBytes(task.receivedBytes)
             : '';
+      // Имя задачи — ссылка на страницу-источник: удобно переотправить
+      // задачу, когда её ссылка протухла.
+      const src = taskSourceUrl(task);
+      const name = escapeHtml(task.filename || task.url);
+      const nameHtml = src
+        ? `<a class="q-name q-name-link" href="${escapeHtml(src)}" target="_blank" rel="noreferrer" title="Открыть страницу-источник: ${escapeHtml(src)}">${name}</a>`
+        : `<div class="q-name">${name}</div>`;
+      const hint = looksExpired(task)
+        ? `<div class="q-hint">Ссылка, похоже, протухла (${escapeHtml(task.error || '')}) — откройте страницу-источник и отправьте задачу заново.</div>`
+        : '';
       return `
         <div class="queue-item">
-          <div class="q-name">${escapeHtml(task.filename || task.url)}</div>
+          ${nameHtml}
           <div class="q-bar"><div style="width:${percent.toFixed(1)}%"></div></div>
           <div class="q-row">
             <span class="${cls}">${STATUS_LABELS[task.status] || task.status}</span>
             <span>${bytes}</span>
             ${queueButtons(task)}
           </div>
+          ${hint}
         </div>`;
     })
     .join('');
@@ -804,16 +1290,111 @@ function renderServerWidget(data) {
   if (!server) {
     dot?.classList.add('bad');
     $('#sw-free').textContent = 'нет данных';
+    $('#sw-free').classList.remove('bad');
     $('#sw-folder').textContent = '—';
     $('#sw-meta').textContent = '';
     return;
   }
 
   dot?.classList.remove('bad');
-  $('#sw-free').textContent = server.freeSpace ? `свободно ${formatBytes(server.freeSpace)}` : 'место: —';
-  $('#sw-folder').textContent = server.downloadDir || '—';
+  const free = server.freeSpace;
+  const need = Number(server.needBytes) || 0;
+  const freeEl = $('#sw-free');
+  let freeText = free ? `свободно ${formatBytes(free)}` : 'место: —';
+  if (need > 0) freeText += ` · нужно ≈${formatBytes(need)}`;
+  freeEl.textContent = freeText;
+  // Красным — когда очередь уже не влезает (сервер считает по реальной папке).
+  freeEl.classList.toggle('bad', server.spaceEnough === false);
+  freeEl.title = need > 0 ? needHintText(server) : '';
+
+  $('#sw-folder').textContent = server.saveDir || server.downloadDir || '—';
   const slots = data?.settings?.max_concurrent ?? '—';
   $('#sw-meta').textContent = `${server.ffmpeg ? 'ffmpeg' : 'без ffmpeg'} · слотов ${server.active ?? 0}/${slots}`;
+}
+
+function needHintText(server) {
+  const placeholder = formatBytes(Number(server.placeholderBytes) || 0);
+  return (
+    `«Нужно ≈${formatBytes(Number(server.needBytes) || 0)}» — сколько места ещё понадобится очереди: ` +
+    'незаконченные задачи минус уже скачанное. У задач без известного веса берётся среднее по скачанному, ' +
+    `а если истории нет — ${placeholder}.`
+  );
+}
+
+/* ─────────── проверка свободного места под партию (перед отправкой) ───────────
+   Вес качества уже известен из пробы (он же показан в списке качеств), серии —
+   из выбранного диапазона, «нужно серверу» приходит в /api/state. Если сумма
+   больше свободного места, кнопка не отправляет с первого клика: показываем
+   предупреждение и просим подтвердить. */
+
+let spaceArmed = false;
+let spaceArmTimer = null;
+
+/** Сколько серий уйдёт в партию — та же логика, что в buildEpisodeList, но без запросов. */
+function plannedEpisodeCount() {
+  const page = state.page;
+  if (!page || page.pageType !== 'SERIAL') return 1;
+
+  const mode = $('#range-mode').value;
+  if (mode === 'current') return 1;
+  if (mode === 'custom') return state.selectedEpisodes.size || 1;
+  if (mode === 'season') {
+    return (state.seasons[String(page.movie.season)]?.episodes ?? []).length || 1;
+  }
+  const total = seasonKeys().reduce(
+    (sum, key) => sum + (state.seasons[key]?.episodes ?? []).length,
+    0,
+  );
+  return total || 1;
+}
+
+/** Оценка «не влезет» или null, если считать нечего / места хватает. */
+function spaceCheck(subsOnly = false) {
+  const server = state.server;
+  if (subsOnly || !server || server.freeSpace == null) return null;
+
+  const size = Number(state.probeInfo[$('#quality').value]?.size) || 0;
+  if (!size) return null; // вес не определился — считать нечего
+
+  const count = plannedEpisodeCount();
+  const need = (Number(server.needBytes) || 0) + size * count;
+  if (need <= server.freeSpace) return null;
+  return { need, free: server.freeSpace, count };
+}
+
+function renderSpaceWarn() {
+  const box = $('#space-warn');
+  if (!box) return;
+
+  const warn = spaceCheck();
+  state.spaceWarn = warn;
+  if (!warn) {
+    box.classList.add('hidden');
+    box.textContent = '';
+    return;
+  }
+
+  const approx = warn.count > 1 ? ` (вес качества × ${warn.count} серий — оценка)` : '';
+  box.textContent = spaceArmed
+    ? `Всё равно скачать? Места может не хватить: нужно ≈${formatBytes(warn.need)}, свободно ${formatBytes(warn.free)}.`
+    : `На сервере может не хватить места: нужно ≈${formatBytes(warn.need)}, свободно ${formatBytes(warn.free)}${approx}.`;
+  box.classList.remove('hidden');
+}
+
+function armSpace() {
+  spaceArmed = true;
+  clearTimeout(spaceArmTimer);
+  spaceArmTimer = setTimeout(disarmSpace, 6000);
+  updateDownloadButtons();
+  renderSpaceWarn();
+}
+
+function disarmSpace() {
+  if (!spaceArmed) return;
+  spaceArmed = false;
+  clearTimeout(spaceArmTimer);
+  updateDownloadButtons();
+  renderSpaceWarn();
 }
 
 /** Подпись под названием: связь с сервером. */
@@ -927,6 +1508,8 @@ async function applyResolvedData(data) {
       seasons = {};
     }
   }
+  // Сезоны только что перечитаны: список серий всех сезонов нужен заново.
+  state.episodesLoaded = false;
   return { qualities, subtitles, seasons };
 }
 
@@ -975,6 +1558,13 @@ async function init() {
       state.page = page;
       // Озвучки приходят вместе с детектом страницы — второй прогон по DOM не нужен.
       state.voiceovers = page.translators || [];
+
+      // По умолчанию — дубляж, если он есть: hdrezka нередко ставит активной свою
+      // озвучку, и раньше её приходилось менять руками (см. HdzgDefaults.pickVoiceover).
+      const siteVoiceover = page.movie.translator_id;
+      const pickedVoiceover = HdzgDefaults.pickVoiceover(state.voiceovers, siteVoiceover);
+      const dubApplied =
+        String(pickedVoiceover) !== String(siteVoiceover) && applyVoiceover(pickedVoiceover);
       renderVoiceovers();
 
       const kind = page.pageType === 'SERIAL' ? 'Сериал' : 'Фильм';
@@ -989,7 +1579,18 @@ async function init() {
         page.pageType === 'SERIAL'
           ? { season: page.movie.season, episode: page.movie.episode }
           : null;
-      const data = await resolveFor(episode);
+      let data = await resolveFor(episode);
+      let voiceoverNote = '';
+
+      // У дубляжа может не оказаться этой серии (сериал озвучен не весь) — тогда
+      // возвращаемся на озвучку сайта и говорим об этом, а не показываем пустоту.
+      if (dubApplied && hasNoLinks(data) && applyVoiceover(siteVoiceover)) {
+        renderVoiceovers();
+        voiceoverNote =
+          `У «${voiceoverTitle(pickedVoiceover)}» нет этой серии — вернулись на «${voiceoverTitle(siteVoiceover)}»`;
+        data = await resolveFor(episode);
+      }
+
       const { qualities, subtitles, seasons } = await applyResolvedData(data);
 
       state.resolved = { qualities, subtitles };
@@ -999,8 +1600,10 @@ async function init() {
       renderSubtitles();
       renderSeasons();
       showControls(true);
-      setStatus('');
+      setStatus(voiceoverNote);
       checkAlreadyDownloaded();
+      // Партия могла собираться (или собраться), пока попап был закрыт.
+      resumeCollectJob();
     } catch (error) {
       state.lastError = String(error?.message || error);
       setPageInfo(
@@ -1019,29 +1622,160 @@ async function init() {
   }
 }
 
-function buildEpisodeList() {
+/* ───────────────── серии всех сезонов (режим «Весь сериал») ─────────────────
+   Ответ по текущей серии содержит серии только текущего сезона, остальные
+   сайт отдаёт запросом action=get_episodes (без номера сезона — сразу все). */
+
+async function resolveAllEpisodes() {
+  const movie = state.page.movie;
+  const cacheKey = `episodes|${movie.id}|${movie.translator_id}`;
+  if (state.resolveCache.has(cacheKey)) return state.resolveCache.get(cacheKey);
+
+  const request = {
+    action: 'get_episodes',
+    id: movie.id,
+    translator_id: movie.translator_id,
+    favs: movie.favs,
+  };
+
+  let data;
+  try {
+    data = await runInPage(pageResolve, [request]);
+  } catch (error) {
+    state.lastError = String(error?.message || error);
+    throw error;
+  }
+
+  if (!data || data.success === false) {
+    const message = data?.message || 'Сайт не вернул список серий';
+    state.lastError = message;
+    throw new Error(message);
+  }
+
+  state.resolveCache.set(cacheKey, data);
+  return data;
+}
+
+/** Раскладывает ответ get_episodes по сезонам, не затирая уже известные серии. */
+function mergeEpisodes(data) {
+  const parsed = parseEpisodes(data, {});
+  let added = 0;
+
+  for (const [seasonId, season] of Object.entries(parsed)) {
+    const target = state.seasons[seasonId];
+    if (!target) {
+      if (season.episodes.length) {
+        state.seasons[seasonId] = { title: season.title, episodes: season.episodes };
+        added += season.episodes.length;
+      }
+    } else if (!target.episodes.length) {
+      target.episodes = season.episodes;
+      added += season.episodes.length;
+    }
+  }
+
+  // Сайт иногда отдаёт разметку без data-season_id — тогда это серии текущего сезона.
+  if (!added && state.page?.movie?.season) {
+    const current = state.seasons[String(state.page.movie.season)];
+    if (current && !current.episodes.length) {
+      const loose = [];
+      for (const chunk of String(data?.episodes ?? '').split('</li>')) {
+        const match = chunk.match(/data-episode_id="(\d+)">(.*)$/);
+        if (match) loose.push({ id: match[1], title: match[2].trim() });
+      }
+      current.episodes = loose;
+      added += loose.length;
+    }
+  }
+
+  return added;
+}
+
+/** Есть ли сезоны, для которых сайт ещё не отдал список серий. */
+function seasonsWithoutEpisodes() {
+  return seasonKeys().filter((key) => !(state.seasons[key]?.episodes ?? []).length);
+}
+
+/** Догрузка списка серий — один раз на озвучку (промис общий, чтобы не дублировать). */
+function ensureAllEpisodes() {
+  if (!seasonsWithoutEpisodes().length) return Promise.resolve(false);
+
+  const seasonsRef = state.seasons;
+  if (!state.episodesLoad) {
+    state.episodesLoad = resolveAllEpisodes()
+      .then((data) => {
+        // За время запроса могли сменить озвучку — тогда результат уже чужой.
+        if (seasonsRef !== state.seasons) return false;
+        mergeEpisodes(data);
+        return true;
+      })
+      .finally(() => {
+        state.episodesLoad = null;
+      });
+  }
+  return state.episodesLoad;
+}
+
+/** Фоновая догрузка: нужна счётчику серий и ручному выбору по всем сезонам. */
+async function prefetchAllEpisodes() {
+  if (state.page?.pageType !== 'SERIAL') return;
+  if (!seasonsWithoutEpisodes().length) {
+    // Все сезоны пришли вместе с ответом — счётчику осталось только обновиться.
+    state.episodesLoaded = true;
+    updateRangeNote();
+    return;
+  }
+
+  try {
+    await ensureAllEpisodes();
+    state.episodesLoaded = true;
+    renderEpisodeGrid();
+  } catch {
+    // не получилось — счётчик скажет, что список уточняется; попробуем при отправке
+  }
+  updateRangeNote();
+}
+
+async function buildEpisodeList() {
   const page = state.page;
   if (page.pageType !== 'SERIAL') return [null];
 
   const mode = $('#range-mode').value;
   const seasons = state.seasons;
-  const keys = seasonKeys();
 
   if (mode === 'current') {
     return [{ season: page.movie.season, episode: page.movie.episode }];
   }
-  if (mode === 'season') {
-    const list = seasons[page.movie.season]?.episodes ?? [];
-    return list.map((episode) => ({ season: page.movie.season, episode: episode.id }));
+
+  // Без полного списка серий «весь сериал» превратился бы в один сезон.
+  if (mode === 'season' || mode === 'all') {
+    try {
+      setStatus('Получаем список серий…');
+      await ensureAllEpisodes();
+    } catch (error) {
+      setStatus(`Не удалось получить все серии: ${error.message}`);
+    }
   }
+
+  if (mode === 'season') {
+    const seasonKey = String(page.movie.season ?? '');
+    return (seasons[seasonKey]?.episodes ?? []).map((episode) => ({
+      season: seasonKey,
+      episode: episode.id,
+    }));
+  }
+
   if (mode === 'all') {
     const result = [];
-    for (const seasonKey of keys) {
-      for (const episode of seasons[seasonKey].episodes) {
+    for (const seasonKey of seasonKeys()) {
+      for (const episode of seasons[seasonKey]?.episodes ?? []) {
         result.push({ season: seasonKey, episode: episode.id });
       }
     }
-    return result;
+    // Сезонов в разметке не оказалось — лучше текущая серия, чем ничего.
+    return result.length
+      ? result
+      : [{ season: page.movie.season, episode: page.movie.episode }];
   }
 
   // «Выбрать серии…» — то, что отмечено чипами (удобно для пропусков).
@@ -1060,7 +1794,7 @@ function buildTasksForEpisode(data, episode, subsOnly = false) {
   if (!subsOnly) {
     const qualities = decodeVideoURL(data.url);
     const wanted = $('#quality').value;
-    qualityLabel = pickQuality(qualities, wanted);
+    qualityLabel = HdzgDefaults.pickQuality(qualities, wanted);
 
     if (!qualityLabel) {
       warnings.push(episode ? `серия ${episode.episode}: нет доступного качества` : 'нет доступного качества');
@@ -1084,20 +1818,22 @@ function buildTasksForEpisode(data, episode, subsOnly = false) {
     ? (freshSeasons[episode.season] ?? state.seasons[episode.season] ?? null)
     : null;
   const episodeData = seasonData?.episodes.find((item) => item.id === episode?.episode) ?? null;
-  const voiceover = state.voiceovers.find((v) => String(v.id) === String(page.movie.translator_id));
 
   const base = {
     referer: page.url,
     movie_id: page.movie.id,
     title: page.title,
     orig_title: page.origTitle,
-    voiceover: voiceover?.title ?? page.movie.translator_id,
+    voiceover: voiceoverTitle(page.movie.translator_id),
     year: page.year ?? null,
     category: page.category ?? null,
     group_key: `movie-${page.movie.id}`,
   };
 
   if (!subsOnly) {
+    // Данные пробы (см. probeQualities): сервер по ним покажет, что скачалось.
+    const probe = state.probeInfo[qualityLabel] ?? null;
+
     tasks.push({
       ...base,
       quality: qualityLabel,
@@ -1108,6 +1844,11 @@ function buildTasksForEpisode(data, episode, subsOnly = false) {
       episode: episode?.episode ?? null,
       episode_title: episodeData?.title ?? null,
       file_type: 'video',
+      // total_bytes сервер уже умеет: это ожидаемый размер для прогресса.
+      total_bytes: probe?.size ?? 0,
+      // Реальное разрешение: сервер пока его только принимает (см. TODO.md).
+      real_width: probe?.width ?? null,
+      real_height: probe?.height ?? null,
     });
   }
 
@@ -1144,58 +1885,381 @@ function buildTasksForEpisode(data, episode, subsOnly = false) {
   return { tasks, warnings };
 }
 
-async function handleDownload(subsOnly = false) {
-  if (state.busy) return;
-  state.busy = true;
+/* ──────────── сбор ссылок: партия живёт на вкладке, попап наблюдает ────────────
+   Зачем так: 200 серий собираются десятки секунд, и раньше попап приходилось
+   держать открытым. Теперь цикл запускается на вкладке (pageCollectLinks),
+   а попап только смотрит за прогрессом и отправляет готовое на сервер. */
 
-  const downloadButton = $('#download');
-  const subsButton = $('#download-subs');
-  downloadButton.disabled = true;
-  subsButton.disabled = true;
+const JOB_POLL_MS = 700;
+
+let jobWatch = null; // текущее наблюдение, чтобы не запускать второе
+let jobRunning = false;
+
+/** Краткая сводка о партии. Ссылки не тянем: их бывает сотни (см. readJobResults). */
+async function readJob() {
+  if (!state.tab?.id) return null;
+  try {
+    const results = await ext.scripting.executeScript({
+      target: { tabId: state.tab.id },
+      world: 'MAIN',
+      func: () => {
+        const job = globalThis.__hdzgJob;
+        if (!job) return null;
+        return {
+          id: job.id,
+          movieId: job.movieId,
+          translatorId: job.translatorId,
+          title: job.title,
+          quality: job.quality ?? null,
+          subsOnly: Boolean(job.subsOnly),
+          status: job.status,
+          done: job.done,
+          total: job.total,
+          sent: job.sent ?? 0,
+          failed: Object.values(job.results).filter((item) => !item.ok).length,
+        };
+      },
+    });
+    return results?.[0]?.result ?? null;
+  } catch {
+    return null; // вкладка закрыта или страница успела перезагрузиться
+  }
+}
+
+async function readJobResults() {
+  if (!state.tab?.id) return null;
+  try {
+    const results = await ext.scripting.executeScript({
+      target: { tabId: state.tab.id },
+      world: 'MAIN',
+      func: () => {
+        const job = globalThis.__hdzgJob;
+        return job ? { id: job.id, results: job.results } : null;
+      },
+    });
+    return results?.[0]?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Правка партии из попапа: отмена сбора и отметка «отправлено». */
+async function updateJob(patch) {
+  if (!state.tab?.id) return;
+  try {
+    await ext.scripting.executeScript({
+      target: { tabId: state.tab.id },
+      world: 'MAIN',
+      func: (fields) => {
+        if (globalThis.__hdzgJob) Object.assign(globalThis.__hdzgJob, fields);
+      },
+      args: [patch],
+    });
+  } catch {
+    // вкладка уже закрыта — править нечего
+  }
+}
+
+function updateDownloadButtons() {
+  const busy = state.busy || jobRunning;
+  $('#download').disabled = busy;
+  $('#download-subs').disabled = busy;
+  // Подтверждение «всё равно скачать» (см. spaceCheck): меняем подпись кнопки.
+  $('#download').classList.toggle('btn-warn', spaceArmed);
+  const label = $('#download-label');
+  if (label) label.textContent = spaceArmed ? 'Всё равно скачать' : 'Скачать на сервер';
+}
+
+function renderCollect(job, note = '') {
+  const box = $('#collect');
+  if (!job && !note) {
+    box.classList.add('hidden');
+    return;
+  }
+
+  box.classList.remove('hidden');
+  $('#collect-cancel').classList.toggle('hidden', job?.status !== 'running');
+  $('#collect-text').textContent =
+    job && !note
+      ? `Собираем ссылки: ${job.done} из ${job.total}. Попап можно закрыть — сбор продолжится на вкладке.`
+      : note;
+}
+
+function watchCollectJob() {
+  if (!jobWatch) {
+    jobWatch = runCollectWatch().finally(() => {
+      jobWatch = null;
+    });
+  }
+  return jobWatch;
+}
+
+async function runCollectWatch() {
+  try {
+    for (;;) {
+      const job = await readJob();
+      jobRunning = job?.status === 'running';
+      updateDownloadButtons();
+
+      if (!job) {
+        renderCollect(null);
+        return;
+      }
+      if (jobRunning) {
+        renderCollect(job);
+        await sleep(JOB_POLL_MS);
+        continue;
+      }
+
+      renderCollect(null);
+      await finishCollectJob(job, true);
+      return;
+    }
+  } finally {
+    jobRunning = false;
+    updateDownloadButtons();
+  }
+}
+
+/** Сбор закончился (или его отменили): решаем, отправлять ли партию на сервер.
+ *  watched — сообщение пришло при живом наблюдении; при повторном открытии попапа
+ *  про отмену молчим: партия уже история. */
+async function finishCollectJob(job, watched = false) {
+  if (job.status === 'sent') {
+    setStatus(`Уже отправлено задач: ${job.sent}`);
+    return;
+  }
+  if (job.status === 'canceled') {
+    if (watched) setStatus(`Сбор ссылок отменён: собрано ${job.done} из ${job.total}`);
+    return;
+  }
+
+  const page = state.page;
+  const samePage =
+    page?.movie &&
+    String(page.movie.id) === String(job.movieId) &&
+    String(page.movie.translator_id) === String(job.translatorId);
+
+  if (!samePage) {
+    // Собрано на другой странице/озвучке: качество и субтитры в попапе сейчас
+    // другие, поэтому собирать задачи отсюда нельзя.
+    renderCollect(
+      null,
+      `В фоне собраны ссылки для «${job.title}» (${job.done} из ${job.total}).` +
+        ' Откройте ту же озвучку на странице фильма и нажмите «Скачать» заново.',
+    );
+    return;
+  }
+
+  await sendCollectedJob(job);
+}
+
+/** Собирает задачи из того, что накопила вкладка, и отправляет их на сервер. */
+async function sendCollectedJob(job) {
+  const collected = await readJobResults();
+  if (!collected || collected.id !== job.id) return; // партия успела смениться
+
+  const tasks = [];
+  const warnings = [];
+
+  for (const [key, result] of Object.entries(collected.results)) {
+    const episode =
+      key === 'film' ? null : { season: key.split(':')[0], episode: key.split(':')[1] };
+
+    if (!result.ok) {
+      warnings.push(episode ? `серия ${episode.episode}: ${result.message}` : result.message);
+      continue;
+    }
+
+    // Тот же сборщик задач, что и раньше: качество и субтитры берутся из
+    // текущего состояния попапа, а ссылки — из собранного на вкладке.
+    const built = buildTasksForEpisode(
+      { url: result.url, subtitle: result.subtitle, subtitle_lns: result.subtitle_lns },
+      episode,
+      job.subsOnly,
+    );
+    tasks.push(...built.tasks);
+    warnings.push(...built.warnings);
+  }
+
+  if (!tasks.length) {
+    setStatus(`Нечего отправлять. ${warnings.join('; ')}`);
+    return;
+  }
+
+  setStatus(`Отправляем ${tasks.length} задач(и) на сервер…`);
+  const response = await serverApi('/api/tasks', {
+    method: 'POST',
+    body: JSON.stringify({ tasks }),
+    timeout: 20000, // длинные сериалы отправляются дольше обычного запроса
+  });
+  await updateJob({ status: 'sent', sent: response.created }); // повторно не отправим
+
+  const warn = warnings.length ? ` Пропуски: ${warnings.slice(0, 3).join('; ')}` : '';
+  // Сервер считает место уже с новыми задачами: если их вес не влезает,
+  // говорим об этом сразу (оценка клиента была приблизительной).
+  const space = response.space;
+  const spaceNote =
+    space && space.enough === false && space.freeBytes != null
+      ? ` Места может не хватить: нужно ≈${formatBytes(space.needBytes)}, свободно ${formatBytes(space.freeBytes)}.`
+      : '';
+  setStatus(
+    (job.subsOnly
+      ? `Отправлено субтитров: ${response.created}.`
+      : `Отправлено: ${response.created}.`) + spaceNote + warn,
+  );
+  refreshQueue();
+  // Задачи только что созданы — обновляем сводку по фильму, чтобы рядом сразу
+  // появилась кнопка «Отменить этот фильм» (см. renderMovieSummary).
+  checkAlreadyDownloaded();
+}
+
+/** Подхватывает партию, которая собиралась (или собралась), пока попап был закрыт. */
+async function resumeCollectJob() {
+  const job = await readJob();
+  if (!job) return;
+
+  // Возвращаем выбранное качество: иначе отправка ушла бы на качестве плеера.
+  // Для отменённых и отправленных партий выбор не трогаем — они уже история.
+  const active = job.status === 'running' || job.status === 'done';
+  if (active && job.quality && state.resolved?.qualities?.[job.quality]) {
+    selectQuality(job.quality);
+  }
+
+  if (job.status === 'running') {
+    jobRunning = true;
+    updateDownloadButtons();
+    renderCollect(job);
+    watchCollectJob();
+    return;
+  }
+  await finishCollectJob(job);
+}
+
+async function handleDownload(subsOnly = false) {
+  if (state.busy || jobRunning) return;
+
+  // Партия может не влезть на диск сервера — это выяснилось бы посреди
+  // загрузки. Предупреждаем заранее и просим нажать ещё раз (кнопка меняется
+  // на «Всё равно скачать»); для субтитров места всегда хватает.
+  if (!subsOnly && !spaceArmed && spaceCheck()) {
+    armSpace();
+    return;
+  }
+  disarmSpace();
+
+  state.busy = true;
+  updateDownloadButtons();
 
   try {
-    const episodes = buildEpisodeList();
+    const episodes = await buildEpisodeList();
     if (!episodes.length) {
       setStatus(subsOnly ? 'Не выбрано ни одной серии для субтитров' : 'Не выбрано ни одной серии');
       return;
     }
 
-    const allTasks = [];
-    const allWarnings = [];
+    const page = state.page;
+    const job = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      movieId: page.movie.id,
+      translatorId: page.movie.translator_id,
+      title: page.title,
+      quality: $('#quality').value,
+      subsOnly,
+      movie: {
+        id: page.movie.id,
+        translator_id: page.movie.translator_id,
+        favs: page.movie.favs,
+        is_camrip: page.movie.is_camrip,
+        is_ads: page.movie.is_ads,
+        is_director: page.movie.is_director,
+      },
+      episodes,
+    };
 
-    for (let i = 0; i < episodes.length; i++) {
-      const episode = episodes[i];
-      setStatus(`Получаем ссылки: ${i + 1} из ${episodes.length}…`);
-      const data = await resolveFor(episode);
-      const { tasks, warnings } = buildTasksForEpisode(data, episode, subsOnly);
-      allTasks.push(...tasks);
-      allWarnings.push(...warnings);
-      if (i < episodes.length - 1) await new Promise((resolve) => setTimeout(resolve, 400));
-    }
-
-    if (!allTasks.length) {
-      setStatus(`Нечего отправлять. ${allWarnings.join('; ')}`);
-      return;
-    }
-
-    setStatus(`Отправляем ${allTasks.length} задач(и) на сервер…`);
-    const result = await serverApi('/api/tasks', {
-      method: 'POST',
-      body: JSON.stringify({ tasks: allTasks }),
-      timeout: 20000, // длинные сериалы отправляются дольше обычного запроса
+    // «Заготовку» партии ставим сами (быстро и с подтверждением), а сам цикл
+    // запускаем следом и не ждём: он живёт на вкладке, а не в попапе.
+    await ext.scripting.executeScript({
+      target: { tabId: state.tab.id },
+      world: 'MAIN',
+      func: (initial) => {
+        globalThis.__hdzgJob = initial;
+      },
+      args: [
+        {
+          id: job.id,
+          movieId: job.movieId,
+          translatorId: job.translatorId,
+          title: job.title,
+          quality: job.quality,
+          subsOnly: job.subsOnly,
+          status: 'running',
+          done: 0,
+          total: episodes.length,
+          results: {},
+          sent: 0,
+          startedAt: Date.now(),
+          finishedAt: null,
+        },
+      ],
     });
 
-    const warn = allWarnings.length ? ` Пропуски: ${allWarnings.join('; ')}` : '';
-    setStatus(subsOnly ? `Отправлено субтитров: ${result.created}.${warn}` : `Отправлено: ${result.created}.${warn}`);
-    refreshQueue();
+    ext.scripting
+      .executeScript({
+        target: { tabId: state.tab.id },
+        world: 'MAIN',
+        func: pageCollectLinks,
+        args: [job],
+      })
+      .catch(() => {
+        // Ошибки сбора видны по статусу партии (сколько серий получилось)
+      });
+
+    setStatus('');
+    renderCollect({ status: 'running', done: 0, total: episodes.length });
+    await watchCollectJob();
   } catch (error) {
     state.lastError = String(error?.message || error);
     setStatus(`Ошибка: ${error.message}`);
   } finally {
     state.busy = false;
-    downloadButton.disabled = false;
-    subsButton.disabled = false;
+    updateDownloadButtons();
   }
+}
+
+/** Сколько задач фильма ещё можно отменить (готовые и сбойные — уже история). */
+function cancelableCount(summary) {
+  return (summary?.downloading ?? 0) + (summary?.queued ?? 0) + (summary?.paused ?? 0);
+}
+
+/** Предупреждение «уже скачивалось» и кнопка отмены этого фильма — по сводке. */
+function renderMovieSummary(summary) {
+  const box = $('#already');
+  const button = $('#cancel-movie');
+  state.movieSummary = summary ?? null;
+  disarmCancelMovie();
+
+  if (!summary?.total) {
+    box.classList.add('hidden');
+    $('#already-text').textContent = '';
+    button.classList.add('hidden');
+    return;
+  }
+
+  const parts = [];
+  if (summary.done) parts.push(`${summary.done} готово`);
+  if (summary.downloading) parts.push(`${summary.downloading} качается`);
+  if (summary.queued) parts.push(`${summary.queued} в очереди`);
+  if (summary.paused) parts.push(`${summary.paused} на паузе`);
+  if (summary.error) parts.push(`${summary.error} с ошибкой`);
+
+  $('#already-text').textContent =
+    `Уже скачивалось: ${parts.join(', ')}. ` +
+    (summary.filesOnDisk ? `Файлов на диске: ${summary.filesOnDisk}. ` : '') +
+    'Повторная загрузка скачает заново и перезапишет готовые файлы, если они на месте.';
+  // Кнопка нужна, только когда есть что отменять.
+  button.classList.toggle('hidden', cancelableCount(summary) === 0);
+  box.classList.remove('hidden');
 }
 
 async function checkAlreadyDownloaded() {
@@ -1207,27 +2271,7 @@ async function checkAlreadyDownloaded() {
   }
 
   try {
-    const summary = await serverApi(`/api/movies/${encodeURIComponent(movie.id)}`);
-    state.movieSummary = summary;
-
-    if (!summary.total) {
-      box.classList.add('hidden');
-      box.textContent = '';
-      return;
-    }
-
-    const parts = [];
-    if (summary.done) parts.push(`${summary.done} готово`);
-    if (summary.downloading) parts.push(`${summary.downloading} качается`);
-    if (summary.queued) parts.push(`${summary.queued} в очереди`);
-    if (summary.paused) parts.push(`${summary.paused} на паузе`);
-    if (summary.error) parts.push(`${summary.error} с ошибкой`);
-
-    box.textContent =
-      `Уже скачивалось: ${parts.join(', ')}. ` +
-      (summary.filesOnDisk ? `Файлов на диске: ${summary.filesOnDisk}. ` : '') +
-      'Повторная загрузка скачает заново и перезапишет готовые файлы, если они на месте.';
-    box.classList.remove('hidden');
+    renderMovieSummary(await serverApi(`/api/movies/${encodeURIComponent(movie.id)}`));
   } catch {
     box.classList.add('hidden');
   }
@@ -1243,7 +2287,9 @@ async function refreshQueue() {
 
   try {
     const data = await serverApi('/api/state?limit=20');
+    state.server = data.server ?? null;
     renderServerWidget(data);
+    renderSpaceWarn();
     updateConnSub(true);
 
     // Перерисовываем список только когда данные изменились: иначе каждые 3 секунды
@@ -1264,6 +2310,8 @@ async function refreshQueue() {
       $('#queue-list').innerHTML = `<div class="hint">${message}</div>`;
     }
     renderServerWidget(null);
+    state.server = null;
+    renderSpaceWarn();
     updateConnSub(false);
   } finally {
     state.queueBusy = false;
@@ -1284,6 +2332,20 @@ $('#copy-debug').addEventListener('click', async () => {
     serverUrl: state.settings.serverUrl || null,
     page: state.page,
     voiceovers: state.voiceovers,
+    // Пробы качеств: вес и реальное разрешение (видно, что именно определилось)
+    probes: state.probeInfo,
+    // Место на сервере и оценка партии: по ним видно, почему показано предупреждение
+    server: state.server
+      ? {
+          saveDir: state.server.saveDir ?? state.server.downloadDir ?? null,
+          freeSpace: state.server.freeSpace ?? null,
+          needBytes: state.server.needBytes ?? null,
+          spaceEnough: state.server.spaceEnough ?? null,
+        }
+      : null,
+    spaceWarn: state.spaceWarn,
+    // Фоновая партия: сколько серий собрано и чем закончилось
+    job: await readJob(),
     lastResolve: state.lastResolve,
     lastError: state.lastError,
   };
@@ -1297,17 +2359,70 @@ $('#copy-debug').addEventListener('click', async () => {
 
 $('#save-settings').addEventListener('click', saveSettings);
 
+/* выбор качества: свой список (в <option> бейдж и вес не вставить) */
+$('#quality-btn').addEventListener('click', () => toggleQualityList());
+
+$('#quality-btn').addEventListener('keydown', (event) => {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  event.preventDefault(); // иначе страница просто прокрутится
+  openQualityList();
+});
+
+$('#quality-list').addEventListener('click', (event) => {
+  const row = event.target.closest('.q-opt');
+  if (!row) return;
+  selectQuality(row.dataset.value);
+  closeQualityList();
+  $('#quality-btn').focus();
+});
+
+document.addEventListener('pointerdown', (event) => {
+  if (!isQualityListOpen()) return;
+  if (event.target.closest('#quality-sel') || event.target.closest('#quality-list')) return;
+  closeQualityList();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && isQualityListOpen()) {
+    closeQualityList();
+    $('#quality-btn').focus();
+    return;
+  }
+  if (!isQualityListOpen()) return;
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+
+  const rows = [...$('#quality-list').querySelectorAll('.q-opt')];
+  const index = rows.indexOf(document.activeElement);
+  const next = event.key === 'ArrowDown'
+    ? Math.min(rows.length - 1, index + 1)
+    : Math.max(0, index - 1);
+  if (rows[next]) {
+    rows[next].focus();
+    event.preventDefault();
+  }
+});
+
+// Список позиционируется вручную: при прокрутке попапа он должен ехать за полем.
+window.addEventListener('scroll', (event) => {
+  if (!isQualityListOpen()) return;
+  const list = $('#quality-list');
+  if (event.target === list || list.contains(event.target)) return; // прокрутка самого списка
+  positionQualityList();
+}, true);
+
+window.addEventListener('resize', () => {
+  if (isQualityListOpen()) positionQualityList();
+});
+
 $('#voiceover').addEventListener('change', async () => {
   const movie = state.page?.movie;
   if (!movie) return;
 
-  const selected = state.voiceovers.find((v) => String(v.id) === $('#voiceover').value);
-  movie.translator_id = $('#voiceover').value;
-  if (movie.action === 'get_movie' && selected) {
-    movie.is_camrip = selected.is_camrip || null;
-    movie.is_ads = selected.is_ads || null;
-    movie.is_director = selected.is_director || null;
-  }
+  // Ссылки в фоновой партии собраны под прошлую озвучку — она больше не нужна.
+  const running = await readJob();
+  if (running?.status === 'running') await updateJob({ canceled: true });
+
+  applyVoiceover($('#voiceover').value);
 
   state.resolveCache.clear();
   setStatus('Обновляем данные для выбранной озвучки…');
@@ -1330,23 +2445,45 @@ $('#voiceover').addEventListener('change', async () => {
 });
 
 $('#subs-enabled').addEventListener('change', () => {
-  state.subsWasChecked = $('#subs-enabled').checked;
+  state.subsTouched = true; // выбор пользователя: дальше его не перебиваем
   const hasSubs = (state.resolved?.subtitles ?? []).length > 0;
   $('#subs-lang-wrap').classList.toggle('hidden', !$('#subs-enabled').checked || !hasSubs);
 });
 
+$('#subs-lang').addEventListener('change', () => {
+  state.subsTouched = true;
+});
+
 $('#range-mode').addEventListener('change', () => {
-  const custom = $('#range-mode').value === 'custom';
+  const mode = $('#range-mode').value;
+  const custom = mode === 'custom';
   $('#range-custom').classList.toggle('hidden', !custom);
   if (custom) renderEpisodeGrid(); // значения могли устареть после смены озвучки
+
+  updateRangeNote();
+  renderSpaceWarn(); // число серий изменилось — оценка места тоже
+  // «Весь сериал» по умолчанию: список серий нужен сразу, а не в момент отправки.
+  if (mode === 'all' || mode === 'season') prefetchAllEpisodes();
 });
 
 /* ручной выбор серий: сезоны-табы, чипы, «выбрать все» / «снять» */
-$('#season-tabs').addEventListener('click', (event) => {
+$('#season-tabs').addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-season]');
   if (!button) return;
   state.activeSeason = button.dataset.season;
+
+  // Серии этого сезона могли ещё не приехать: сайт отдаёт их отдельным запросом.
+  if (!(state.seasons[state.activeSeason]?.episodes ?? []).length) {
+    $('#ep-grid').innerHTML = '<div class="hint">Загружаем список серий…</div>';
+    try {
+      await ensureAllEpisodes();
+    } catch {
+      // renderEpisodeGrid ниже сам скажет, что серии не найдены
+    }
+  }
+
   renderEpisodeGrid();
+  updateRangeNote();
 });
 
 $('#ep-grid').addEventListener('click', (event) => {
@@ -1372,6 +2509,60 @@ $('#ep-none').addEventListener('click', () => {
 
 $('#download').addEventListener('click', () => handleDownload(false));
 $('#download-subs').addEventListener('click', () => handleDownload(true));
+
+/* остановка фонового сбора ссылок */
+$('#collect-cancel').addEventListener('click', async () => {
+  setStatus('Останавливаем сбор ссылок…');
+  await updateJob({ canceled: true });
+});
+
+/* Отмена задач текущего фильма — из блока «уже скачивалось», чтобы не искать
+   его строки в очереди. Подтверждение вторым кликом, как у «Остановить все». */
+
+let cancelMovieArmed = false;
+let cancelMovieTimer = null;
+
+function disarmCancelMovie() {
+  cancelMovieArmed = false;
+  clearTimeout(cancelMovieTimer);
+  const button = $('#cancel-movie');
+  button.textContent = 'Отменить этот фильм';
+  button.classList.remove('btn-armed');
+}
+
+$('#cancel-movie').addEventListener('click', async () => {
+  const button = $('#cancel-movie');
+  const movie = state.page?.movie;
+  if (!movie || button.disabled) return;
+
+  if (!cancelMovieArmed) {
+    cancelMovieArmed = true;
+    button.textContent = 'Точно?';
+    button.classList.add('btn-armed');
+    clearTimeout(cancelMovieTimer);
+    cancelMovieTimer = setTimeout(disarmCancelMovie, 4000);
+    return;
+  }
+
+  disarmCancelMovie();
+  button.disabled = true;
+  try {
+    const data = await serverApi(`/api/movies/${encodeURIComponent(movie.id)}/cancel`, {
+      method: 'POST',
+    });
+    setStatus(
+      data.canceled
+        ? `Отменено задач этого фильма: ${data.canceled}`
+        : 'Нечего отменять: незаконченных задач у этого фильма нет',
+    );
+    if (data.movie) renderMovieSummary(data.movie); // свежие счётчики в предупреждении
+    await refreshQueue();
+  } catch (error) {
+    setStatus(`Не удалось отменить: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 /* сворачиваемая очередь */
 $('#queue-toggle').addEventListener('click', async () => {

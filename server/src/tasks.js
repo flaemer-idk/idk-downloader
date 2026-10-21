@@ -50,6 +50,10 @@ export function prepareTask(raw) {
         ? String(raw.subtitle_lang_code || raw.subtitleLangCode)
         : null,
     total_bytes: Number(raw.total_bytes || raw.totalBytes) || 0,
+    // Реальное разрешение файла: считает клиент (проба Range-запросом,
+    // см. client-extension/media-probe.js) — сервер только хранит и показывает.
+    real_width: Number(raw.real_width || raw.realWidth) || null,
+    real_height: Number(raw.real_height || raw.realHeight) || null,
   };
 
   if (!task.filename) {

@@ -16,6 +16,7 @@
 | --- | --- |
 | `server/` | Сервер загрузок: Node.js ≥ 22.5, без npm-зависимостей (встроенный `node:sqlite`), веб-морда. Подробности — `server/README.md` |
 | `client-extension/` | Расширение-клиент (Chrome 111+ / Firefox 128+): кнопка «Скачать на сервер» на странице hdrezka. См. `client-extension/README.md` |
+| `TODO.md` | Планы: что осталось сделать (расширение и сервер) и объяснения по закрытым вопросам (кэш пробы, перерезолв ссылок) |
 | `nix/` | `package.nix` (сборка пакета), `module.nix` (NixOS-модуль для флейков), `hdrezka-grabber.nix` (самодостаточный модуль без флейков — просто скопировать в свой конфиг) |
 | `flake.nix` | Флейк: `nixosModules.default`, `packages.hdrezka-grabber-server`, overlay |
 | `ARCHITECTURE.md` | Разбор архитектуры (для разработки/ИИ-моделей) |
