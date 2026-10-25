@@ -130,7 +130,7 @@ const QUALITY_URL = '[1080p Ultra]https://cdn.test/1080u.mp4,[1080p]https://cdn.
  * `movieSummary` — что сервер отвечает про этот фильм (сводка для «уже
  * скачивалось»), `onMovieCancel` — ответ на «отменить этот фильм».
  */
-async function startPopup({ page, resolve, movieSummary = { total: 0 }, onMovieCancel = null }) {
+async function startPopup({ page, resolve, movieSummary = { total: 0 }, onMovieCancel = null, legacySettings = false }) {
   const elements = new Map();
   const element = (selector) => {
     if (!elements.has(selector)) elements.set(selector, makeElement(selector));
@@ -236,8 +236,13 @@ async function startPopup({ page, resolve, movieSummary = { total: 0 }, onMovieC
   vm.runInContext(read('defaults.js'), sandbox, { filename: 'defaults.js' });
   vm.runInContext(read('popup.js'), sandbox, { filename: 'popup.js' });
 
-  storage['hdzg-server-settings'] = { serverUrl: 'http://127.0.0.1:9', token: '', updatedAt: Date.now() };
-  storage['hdzg-server-ui'] = {};
+  if (legacySettings) {
+    // Настройки, сохранённые ещё до переименования проекта, должны подхватываться.
+    storage['hdzg-server-settings'] = { serverUrl: 'http://127.0.0.1:9', token: '', updatedAt: Date.now() };
+  } else {
+    storage['idk-server-settings'] = { serverUrl: 'http://127.0.0.1:9', token: '', updatedAt: Date.now() };
+  }
+  storage['idk-server-ui'] = {};
 
   const hook = vm.runInContext('({ state, init, renderSubtitles })', sandbox);
   return {
@@ -484,6 +489,20 @@ const doneOnly = await startPopup({
 });
 await settle(doneOnly.hook);
 await waitFor(() => doneOnly.requests.some((item) => item.path.startsWith('/api/movies/')), 'сводка по фильму');
+
+/* ───────────── 8. Настройки от старого имени ключа подхватываются ─────────── */
+
+console.log('\nМиграция настроек: в storage только старый ключ hdzg-server-settings');
+
+const legacy = await startPopup({
+  legacySettings: true,
+  page: filmPage([voice('0', 'HDrezka Studio'), voice('42', 'Дубляж (Кириллица)')], '0'),
+  resolve: () => ({ success: true, url: QUALITY_URL, subtitle: '', subtitle_lns: {}, seasons: '' }),
+});
+await settle(legacy.hook);
+
+check('адрес сервера прочитан из старого ключа', legacy.hook.state.settings.serverUrl, 'http://127.0.0.1:9');
+check('попап работает дальше (страница разобрана, озвучка выбрана)', legacy.resolveCalls[0]?.translator_id, '42');
 
 check('всё готово — предупреждение видно, кнопки нет', [
   doneOnly.element('#already').classList.contains('hidden'),

@@ -1,10 +1,10 @@
-# NixOS-модуль: services.hdrezka-grabber-server (вариант для флейков).
-# Если флейки не используются — возьмите `nix/hdrezka-grabber.nix`: это
+# NixOS-модуль: services.idk-downloader (вариант для флейков).
+# Если флейки не используются — возьмите `nix/idk-downloader.nix`: это
 # самодостаточный модуль, который сам скачивает исходники с GitHub.
 #
 # Пример подключения (flake):
-#   imports = [ inputs.hdrezka-grabber.nixosModules.default ];
-#   services.hdrezka-grabber-server = {
+#   imports = [ inputs.idk-downloader.nixosModules.default ];
+#   services.idk-downloader = {
 #     enable = true;
 #     port = 8081;
 #     openFirewall = true;
@@ -20,14 +20,14 @@
 }:
 
 let
-  cfg = config.services.hdrezka-grabber-server;
+  cfg = config.services.idk-downloader;
   inherit (lib) mkEnableOption mkIf mkOption types;
 
-  dataDirDefault = "/var/lib/hdrezka-grabber";
+  dataDirDefault = "/var/lib/idk-downloader";
 in
 {
-  options.services.hdrezka-grabber-server = {
-    enable = mkEnableOption "HDrezka Grabber Server — сервер загрузок hdrezka с веб-мордой";
+  options.services.idk-downloader = {
+    enable = mkEnableOption "idk downloader — сервер загрузок с веб-мордой";
 
     package = mkOption {
       type = types.package;
@@ -56,13 +56,13 @@ in
 
     user = mkOption {
       type = types.str;
-      default = "hdrezka-grabber";
+      default = "idk-downloader";
       description = "Пользователь, от которого работает сервис.";
     };
 
     group = mkOption {
       type = types.str;
-      default = "hdrezka-grabber";
+      default = "idk-downloader";
       description = ''
         Группа сервиса. Если медиатека лежит в общей папке (например, для Jellyfin),
         укажите ту же группу, что у медиасервера.
@@ -94,7 +94,7 @@ in
     environmentFile = mkOption {
       type = types.nullOr types.path;
       default = null;
-      example = "/run/secrets/hdrezka-grabber.env";
+      example = "/run/secrets/idk-downloader.env";
       description = ''
         Файл окружения systemd — удобно для секретов, например:
         `AUTH_TOKEN=секрет` (тогда тот же токен нужно вписать в расширении).
@@ -126,7 +126,7 @@ in
     assertions = [
       {
         assertion = cfg.user != "root";
-        message = "services.hdrezka-grabber-server.user: не запускайте сервер от root.";
+        message = "services.idk-downloader.user: не запускайте сервер от root.";
       }
     ];
 
@@ -134,7 +134,7 @@ in
       isSystemUser = true;
       group = cfg.group;
       home = cfg.dataDir;
-      description = "HDrezka Grabber Server";
+      description = "idk downloader";
     };
     users.groups."${cfg.group}" = { };
 
@@ -143,9 +143,9 @@ in
       "d ${cfg.downloadDir} 0750 ${cfg.user} ${cfg.group} -"
     ] ++ lib.optional (cfg.libraryDir != null) "d ${cfg.libraryDir} 0775 ${cfg.user} ${cfg.group} -";
 
-    systemd.services.hdrezka-grabber-server = {
-      description = "HDrezka Grabber Server";
-      documentation = [ "https://github.com/flaemer-idk/HDrezka-Grabber-Server" ];
+    systemd.services.idk-downloader = {
+      description = "idk downloader";
+      documentation = [ "https://github.com/flaemer-idk/idk-downloader" ];
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];

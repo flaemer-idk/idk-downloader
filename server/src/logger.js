@@ -61,7 +61,7 @@ export function printBanner({
 }) {
   const line = color.dim('─'.repeat(52));
   console.log('');
-  console.log(`${color.bold('HDrezka Grabber Server')} ${color.gray(`v${version}`)}`);
+  console.log(`${color.bold('idk downloader')} ${color.gray(`v${version}`)}`);
   console.log(line);
   console.log(`  ${color.gray('Порт')}              ${color.cyan(String(port))}`);
   console.log(`  ${color.gray('Папка загрузок')}    ${downloadDir}`);

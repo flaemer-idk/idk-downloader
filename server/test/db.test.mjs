@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 // Конфиг читает переменные окружения при импорте, поэтому DB_FILE ставим
 // до первого import — тесты работают на своей временной базе, не на рабочей.
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hdzg-db-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'idk-db-'));
 process.env.DB_FILE = path.join(tmpDir, 'grabber.db');
 
 // «Старая» база: всё как в прошлой версии, то есть без колонок из миграций

@@ -1,20 +1,20 @@
-# HDrezka Grabber Server — NixOS-модуль «без флейков» (самодостаточный).
+# idk downloader — NixOS-модуль «без флейков» (самодостаточный).
 #
 # Сам скачивает исходники с GitHub (fetchFromGitHub) и сам собирает пакет —
 # достаточно скопировать этот файл в свой конфиг:
 #
-#   cp nix/hdrezka-grabber.nix ~/nixos/Custom/HDrezka/module.nix
+#   cp nix/idk-downloader.nix ~/nixos/Custom/idk/module.nix
 #
 # и подключить как обычно:
 #
-#   imports = [ ./Custom/HDrezka/module.nix ];
+#   imports = [ ./Custom/idk/module.nix ];
 #
-#   services.hdrezka-grabber-server = {
+#   services.idk-downloader = {
 #     enable = true;
 #     port = 8080;
 #     openFirewall = true;
-#     dataDir = "/idkselfhost/HDrezka";                # база (история + настройки)
-#     downloadDir = "/idkselfhost/HDrezka/downloads";  # куда качать без медиатеки
+#     dataDir = "/idkselfhost/idk-downloader";                # база (история + настройки)
+#     downloadDir = "/idkselfhost/idk-downloader/downloads";  # куда качать без медиатеки
 #     libraryDir = "/idkselfhost/Media";               # опционально: качать сразу в медиатеку
 #     extraPackages = [ pkgs.ffmpeg ];                 # опционально: .m3u8 (HLS)
 #   };
@@ -22,7 +22,7 @@
 # Обновление версии: поменять rev на новый тег репозитория, поставить
 # hash = lib.fakeHash и запустить nixos-rebuild switch — Nix напишет в ошибке
 # настоящий хеш ("got: sha256-..."), его и вписать. Либо заранее:
-#   nix-prefetch-url --unpack https://github.com/flaemer-idk/HDrezka-Grabber-Server/archive/refs/tags/<тег>.tar.gz
+#   nix-prefetch-url --unpack https://github.com/flaemer-idk/idk-downloader/archive/refs/tags/<тег>.tar.gz
 #
 # Что за сервис: см. README.md репозитория. Из командной строки у сервера
 # настраивается только порт; остальное (папки, шаблоны имён, медиатека, лимиты) —
@@ -35,12 +35,12 @@
 }:
 
 let
-  cfg = config.services.hdrezka-grabber-server;
+  cfg = config.services.idk-downloader;
 
   # ── Исходники: тег репозитория ──────────────────────────────────────────
   fetched = pkgs.fetchFromGitHub {
     owner = "flaemer-idk";
-    repo = "HDrezka-Grabber-Server";
+    repo = "idk-downloader";
     rev = "v0.1.0";
     hash = "sha256-hXU9n4nlh/Tw27VkB/0MvLyH9RirSOjP22luJTcKGXc=";
   };
@@ -63,7 +63,7 @@ let
 
   # ── Пакет (то же, что nix/package.nix, но из скачанных исходников) ──────
   defaultPackage = pkgs.stdenv.mkDerivation {
-    pname = "hdrezka-grabber-server";
+    pname = "idk-downloader";
     version = (lib.importJSON "${serverSrc}/package.json").version;
     src = serverSrc;
 
@@ -72,15 +72,15 @@ let
     installPhase = ''
       runHook preInstall
 
-      mkdir -p $out/share/hdrezka-grabber-server $out/bin
-      cp -r package.json README.md src public $out/share/hdrezka-grabber-server/
+      mkdir -p $out/share/idk-downloader $out/bin
+      cp -r package.json README.md src public $out/share/idk-downloader/
 
       # Обёртка: запускает node с сервером и задаёт разумные пути по умолчанию,
       # чтобы `nix run` работал без настройки (в Store писать нельзя).
-      makeWrapper ${lib.getExe nodejs} $out/bin/hdrezka-grabber-server \
-        --add-flags "$out/share/hdrezka-grabber-server/src/index.js" \
-        --run 'export DB_FILE="''${DB_FILE:-''${XDG_STATE_HOME:-$HOME/.local/state}/hdrezka-grabber/grabber.db}"' \
-        --run 'export DOWNLOAD_DIR="''${DOWNLOAD_DIR:-''${XDG_DOWNLOAD_DIR:-$HOME/Downloads}/HDrezkaGrabber}"'
+      makeWrapper ${lib.getExe nodejs} $out/bin/idk-downloader \
+        --add-flags "$out/share/idk-downloader/src/index.js" \
+        --run 'export DB_FILE="''${DB_FILE:-''${XDG_STATE_HOME:-$HOME/.local/state}/idk-downloader/grabber.db}"' \
+        --run 'export DOWNLOAD_DIR="''${DOWNLOAD_DIR:-''${XDG_DOWNLOAD_DIR:-$HOME/Downloads}/idk-downloader}"'
 
       runHook postInstall
     '';
@@ -88,30 +88,30 @@ let
     doInstallCheck = true;
     installCheckPhase = ''
       runHook preInstallCheck
-      $out/bin/hdrezka-grabber-server --version | grep -q $version
-      $out/bin/hdrezka-grabber-server --help | grep -q -- '--port'
+      $out/bin/idk-downloader --version | grep -q $version
+      $out/bin/idk-downloader --help | grep -q -- '--port'
       runHook postInstallCheck
     '';
 
     meta = {
-      description = "Локальный сервер загрузок hdrezka с веб-мордой (качает на сервер, а не в браузер)";
-      homepage = "https://github.com/flaemer-idk/HDrezka-Grabber-Server";
+      description = "Локальный сервер загрузок с веб-мордой (качает на сервер, а не в браузер)";
+      homepage = "https://github.com/flaemer-idk/idk-downloader";
       license = lib.licenses.gpl3Only;
-      mainProgram = "hdrezka-grabber-server";
+      mainProgram = "idk-downloader";
       platforms = lib.platforms.all;
     };
   };
 
-  dataDirDefault = "/var/lib/hdrezka-grabber";
+  dataDirDefault = "/var/lib/idk-downloader";
 in
 {
-  options.services.hdrezka-grabber-server = {
-    enable = lib.mkEnableOption "HDrezka Grabber Server — сервер загрузок hdrezka с веб-мордой";
+  options.services.idk-downloader = {
+    enable = lib.mkEnableOption "idk downloader — сервер загрузок с веб-мордой";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = defaultPackage;
-      defaultText = lib.literalExpression "пакет, собранный из flaemer-idk/HDrezka-Grabber-Server (тег v0.1.0)";
+      defaultText = lib.literalExpression "пакет, собранный из flaemer-idk/idk-downloader (тег v0.1.0)";
       description = "Пакет сервера.";
     };
 
@@ -135,13 +135,13 @@ in
 
     user = lib.mkOption {
       type = lib.types.str;
-      default = "hdrezka-grabber";
+      default = "idk-downloader";
       description = "Пользователь, от которого работает сервис.";
     };
 
     group = lib.mkOption {
       type = lib.types.str;
-      default = "hdrezka-grabber";
+      default = "idk-downloader";
       description = ''
         Группа сервиса. Если медиатека лежит в общей папке (например, для Jellyfin),
         укажите ту же группу, что у медиасервера.
@@ -173,7 +173,7 @@ in
     environmentFile = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
-      example = "/run/secrets/hdrezka-grabber.env";
+      example = "/run/secrets/idk-downloader.env";
       description = ''
         Файл окружения systemd — удобно для секретов, например:
         `AUTH_TOKEN=секрет` (тогда тот же токен нужно вписать в расширении).
@@ -205,7 +205,7 @@ in
     assertions = [
       {
         assertion = cfg.user != "root";
-        message = "services.hdrezka-grabber-server.user: не запускайте сервер от root.";
+        message = "services.idk-downloader.user: не запускайте сервер от root.";
       }
     ];
 
@@ -213,7 +213,7 @@ in
       isSystemUser = true;
       group = cfg.group;
       home = cfg.dataDir;
-      description = "HDrezka Grabber Server";
+      description = "idk downloader";
     };
     users.groups."${cfg.group}" = { };
 
@@ -222,9 +222,9 @@ in
       "d ${cfg.downloadDir} 0750 ${cfg.user} ${cfg.group} -"
     ] ++ lib.optional (cfg.libraryDir != null) "d ${cfg.libraryDir} 0775 ${cfg.user} ${cfg.group} -";
 
-    systemd.services.hdrezka-grabber-server = {
-      description = "HDrezka Grabber Server";
-      documentation = [ "https://github.com/flaemer-idk/HDrezka-Grabber-Server" ];
+    systemd.services.idk-downloader = {
+      description = "idk downloader";
+      documentation = [ "https://github.com/flaemer-idk/idk-downloader" ];
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];

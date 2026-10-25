@@ -21,7 +21,7 @@ const HdzgProbe = (() => {
   const MOOV_MAX_BYTES = 2 * 1024 * 1024; // больше не бывает даже у длинных фильмов
   const BOX_PEEK_BYTES = 4 * 1024; // шапка бокса, который лежит за первым окном
   const DEFAULT_TIMEOUT_MS = 6000;
-  const CACHE_KEY = 'hdzg-probe-cache';
+  const CACHE_KEY = 'idk-probe-cache';
   const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
   const CACHE_MAX_ENTRIES = 300;
 

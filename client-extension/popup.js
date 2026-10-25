@@ -10,8 +10,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Настройки: адрес и токен — в storage.sync, чтобы переезжали с профилем;
  *  в storage.local остаётся та же копия (синхронизация может быть выключена). */
-const STORAGE_KEY = 'hdzg-server-settings';
-const UI_KEY = 'hdzg-server-ui';
+const STORAGE_KEY = 'idk-server-settings';
+// Ключ настроек до переименования проекта: читается, только если нового нет.
+const LEGACY_STORAGE_KEY = 'hdzg-server-settings';
+const UI_KEY = 'idk-server-ui';
 const STATUS_LABELS = {
   queued: 'в очереди',
   downloading: 'скачивается',
@@ -108,6 +110,21 @@ async function readStoredSettings() {
       if (value && typeof value === 'object') copies.push(value);
     } catch {
       // приватный режим или нет разрешения — просто пропускаем это хранилище
+    }
+  }
+  if (copies.length === 0) {
+    // Настройки, сохранённые до переименования проекта, переносятся сами:
+    // как только они сохранятся под новым ключом, старый перестанет читаться.
+    for (const area of areas) {
+      try {
+        const legacy = (await area.get(LEGACY_STORAGE_KEY))?.[LEGACY_STORAGE_KEY];
+        if (legacy && typeof legacy === 'object') {
+          copies.push(legacy);
+          break;
+        }
+      } catch {
+        // как выше — пропускаем это хранилище
+      }
     }
   }
   copies.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
@@ -489,15 +506,15 @@ async function runInPage(func, args = []) {
  * Сбор ссылок по сериям — цикл живёт на самой вкладке (MAIN world), поэтому
  * попап можно закрыть: работа продолжится, а при следующем открытии попап
  * подхватит результат (см. resumeCollectJob). Прогресс и ответы сайта лежат
- * в window.__hdzgJob, туда же попап пишет отмену.
+ * в window.__idkJob, туда же попап пишет отмену.
  *
  * Функция уходит в executeScript целиком и потому ни на что снаружи не
  * ссылается: запрос к сайту здесь свой (такой же, как в pageResolve).
- * Ожидаемая партия (window.__hdzgJob) создаётся попапом до запуска — по её id
+ * Ожидаемая партия (window.__idkJob) создаётся попапом до запуска — по её id
  * проверяем, что собираем именно её.
  */
 async function pageCollectLinks(job) {
-  const progress = window.__hdzgJob;
+  const progress = window.__idkJob;
   if (!progress || progress.id !== job.id) return; // попап уже начал другую партию
 
   const key = (episode) => (episode ? `${episode.season}:${episode.episode}` : 'film');
@@ -543,7 +560,7 @@ async function pageCollectLinks(job) {
   };
 
   for (const episode of job.episodes) {
-    if (window.__hdzgJob !== progress) return; // партию сменили
+    if (window.__idkJob !== progress) return; // партию сменили
     if (progress.canceled) {
       progress.status = 'canceled';
       break;
@@ -1903,7 +1920,7 @@ async function readJob() {
       target: { tabId: state.tab.id },
       world: 'MAIN',
       func: () => {
-        const job = globalThis.__hdzgJob;
+        const job = globalThis.__idkJob;
         if (!job) return null;
         return {
           id: job.id,
@@ -1933,7 +1950,7 @@ async function readJobResults() {
       target: { tabId: state.tab.id },
       world: 'MAIN',
       func: () => {
-        const job = globalThis.__hdzgJob;
+        const job = globalThis.__idkJob;
         return job ? { id: job.id, results: job.results } : null;
       },
     });
@@ -1951,7 +1968,7 @@ async function updateJob(patch) {
       target: { tabId: state.tab.id },
       world: 'MAIN',
       func: (fields) => {
-        if (globalThis.__hdzgJob) Object.assign(globalThis.__hdzgJob, fields);
+        if (globalThis.__idkJob) Object.assign(globalThis.__idkJob, fields);
       },
       args: [patch],
     });
@@ -2183,7 +2200,7 @@ async function handleDownload(subsOnly = false) {
       target: { tabId: state.tab.id },
       world: 'MAIN',
       func: (initial) => {
-        globalThis.__hdzgJob = initial;
+        globalThis.__idkJob = initial;
       },
       args: [
         {

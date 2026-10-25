@@ -447,9 +447,12 @@ function tailOf(filename) {
 
 /* ---------------- api ---------------- */
 
-var TOKEN_KEY = 'hdzg_token';
+var TOKEN_KEY = 'idk_token';
+var LEGACY_TOKEN_KEY = 'hdzg_token'; // ключ до переименования проекта — читается, только если нового нет
 var token = '';
-try { token = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { /* приватный режим */ }
+try {
+  token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY) || '';
+} catch (e) { /* приватный режим */ }
 
 async function api(path, options) {
   var opts = options || {};

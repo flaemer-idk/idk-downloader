@@ -32,7 +32,7 @@ function check(name, actual, expected) {
   }
 }
 
-const dir = mkdtempSync(join(tmpdir(), 'hdzg-probe-'));
+const dir = mkdtempSync(join(tmpdir(), 'idk-probe-'));
 
 function hasFfmpeg() {
   try {

@@ -1,4 +1,4 @@
-# HDrezka Grabber — сервер загрузок
+# idk downloader — сервер загрузок
 
 Локальный сервер, который скачивает видео и субтитры **на себя** (а не на ноутбук)
 и отдаёт веб-морду с очередью, прогрессом и настройками.
@@ -32,24 +32,24 @@ node src/index.js --version
 
 ## Установка на NixOS
 
-Есть два варианта: самодостаточный модуль без флейков (`nix/hdrezka-grabber.nix`)
+Есть два варианта: самодостаточный модуль без флейков (`nix/idk-downloader.nix`)
 и флейк (пакет + модуль, `nix/module.nix`).
 
 ### Без флейков
 
-`nix/hdrezka-grabber.nix` сам скачивает исходники с GitHub (`fetchFromGitHub`,
+`nix/idk-downloader.nix` сам скачивает исходники с GitHub (`fetchFromGitHub`,
 тег `v0.1.0`) и сам собирает пакет — достаточно скопировать файл в свой конфиг:
 
 ```bash
-cp nix/hdrezka-grabber.nix ~/nixos/Custom/HDrezka/module.nix
+cp nix/idk-downloader.nix ~/nixos/Custom/idk/module.nix
 ```
 
 ```nix
 # в конфиге
 {
-  imports = [ ./Custom/HDrezka/module.nix ];
+  imports = [ ./Custom/idk/module.nix ];
 
-  services.hdrezka-grabber-server = {
+  services.idk-downloader = {
     enable = true;
     port = 8080;
     openFirewall = true;                  # чтобы расширение с ноутбука видело сервер
@@ -70,14 +70,14 @@ cp nix/hdrezka-grabber.nix ~/nixos/Custom/HDrezka/module.nix
 ```nix
 # flake.nix вашей конфигурации
 {
-  inputs.hdrezka-grabber.url = "github:flaemer-idk/HDrezka-Grabber-Server";
+  inputs.idk-downloader.url = "github:flaemer-idk/idk-downloader";
 
-  outputs = { nixpkgs, hdrezka-grabber, ... }: {
+  outputs = { nixpkgs, idk-downloader, ... }: {
     nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
       modules = [
-        hdrezka-grabber.nixosModules.default
+        idk-downloader.nixosModules.default
         {
-          services.hdrezka-grabber-server = {
+          services.idk-downloader = {
             enable = true;
             port = 8081;
             openFirewall = true;                  # чтобы расширение с ноутбука видело сервер
@@ -95,18 +95,18 @@ cp nix/hdrezka-grabber.nix ~/nixos/Custom/HDrezka/module.nix
 ```
 
 Что делает модуль: создаёт системного пользователя и каталоги, запускает сервис
-`hdrezka-grabber-server` с автоперезапуском, ждёт монтирования папок
+`idk-downloader` с автоперезапуском, ждёт монтирования папок
 (`RequiresMountsFor`), ограничивает доступ (`ProtectSystem = strict`, запись —
 только в свои каталоги) и при `openFirewall = true` открывает порт.
 
-Без NixOS: готовый юнит лежит в `server/deploy/hdrezka-grabber-server.service`
-(поправьте пути и пользователя, затем `systemctl enable --now hdrezka-grabber-server`).
+Без NixOS: готовый юнит лежит в `server/deploy/idk-downloader.service`
+(поправьте пути и пользователя, затем `systemctl enable --now idk-downloader`).
 
 Пакет отдельно:
 
 ```bash
-nix build .#hdrezka-grabber-server     # ./result/bin/hdrezka-grabber-server --help
-nix run .#hdrezka-grabber-server       # запустить сразу (данные в ~/.local/state)
+nix build .#idk-downloader     # ./result/bin/idk-downloader --help
+nix run .#idk-downloader       # запустить сразу (данные в ~/.local/state)
 ```
 
 > Nix-флейки видят только файлы, отслеживаемые git, поэтому перед первой сборкой
@@ -116,7 +116,7 @@ nix run .#hdrezka-grabber-server       # запустить сразу (данн
 
 Что внутри пакета: только `node` и обёртка-лаунчер (зависимостей нет — используется
 встроенный `node:sqlite`). Обёртка задаёт разумные пути по умолчанию
-(`$XDG_STATE_HOME/hdrezka-grabber/grabber.db`, `~/Downloads/HDrezkaGrabber`),
+(`$XDG_STATE_HOME/idk-downloader/grabber.db`, `~/Downloads/idk-downloader`),
 чтобы `nix run` работал без настройки; в Store ничего не пишется.
 
 Логи цветные (уровни INFO/ГОТОВО/ВНИМАНИЕ/ОШИБКА, идентификаторы задач подсвечены)
@@ -153,15 +153,15 @@ PORT=8080 DOWNLOAD_DIR=/mnt/media/hdrezka AUTH_TOKEN=мойсекрет node src
 ### Автозапуск (systemd)
 
 ```ini
-# /etc/systemd/system/hdzg-server.service
+# /etc/systemd/system/idk-downloader.service
 [Unit]
-Description=HDrezka Grabber Server
+Description=idk downloader
 After=network.target
 
 [Service]
 Type=simple
 User=media
-WorkingDirectory=/opt/hdzg/server
+WorkingDirectory=/opt/idk-downloader/server
 Environment=PORT=8080
 Environment=DOWNLOAD_DIR=/mnt/media/hdrezka
 ExecStart=/usr/bin/node src/index.js
@@ -172,7 +172,7 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable --now hdzg-server
+sudo systemctl enable --now idk-downloader
 ```
 
 ## Как это работает

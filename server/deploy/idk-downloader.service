@@ -1,32 +1,32 @@
 # systemd-юнит для обычного Linux (не NixOS).
 # Положите файл в /etc/systemd/system/ и выполните:
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now hdrezka-grabber-server
+#   sudo systemctl enable --now idk-downloader
 #
 # Пути и пользователя поправьте под себя. Для NixOS используйте модуль
-# services.hdrezka-grabber-server (см. nix/module.nix, а для варианта без
-# флейков — nix/hdrezka-grabber.nix) — там всё то же самое, но декларативно.
+# services.idk-downloader (см. nix/module.nix, а для варианта без
+# флейков — nix/idk-downloader.nix) — там всё то же самое, но декларативно.
 [Unit]
-Description=HDrezka Grabber Server (сервер загрузок hdrezka с веб-мордой)
-Documentation=https://github.com/flaemer-idk/HDrezka-Grabber-Server
+Description=idk downloader (сервер загрузок с веб-мордой)
+Documentation=https://github.com/flaemer-idk/idk-downloader
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=hdrezka-grabber
-Group=hdrezka-grabber
-WorkingDirectory=/opt/HDrezka-Grabber/server
+User=idk-downloader
+Group=idk-downloader
+WorkingDirectory=/opt/idk-downloader/server
 
-# Порт: main изменяется аргументом --port
-ExecStart=/usr/bin/node /opt/HDrezka-Grabber/server/src/index.js --port 8080
+# Порт: изменяется аргументом --port
+ExecStart=/usr/bin/node /opt/idk-downloader/server/src/index.js --port 8080
 
-Environment=DB_FILE=/var/lib/hdrezka-grabber/grabber.db
-Environment=DOWNLOAD_DIR=/var/lib/hdrezka-grabber/downloads
+Environment=DB_FILE=/var/lib/idk-downloader/grabber.db
+Environment=DOWNLOAD_DIR=/var/lib/idk-downloader/downloads
 # Медиатека (необязательно; дальше настраивается в веб-морде):
 #Environment=LIBRARY_DIR=/mnt/media/Jellyfin
 # Токен доступа к API (необязательно):
-#EnvironmentFile=/etc/hdrezka-grabber.env
+#EnvironmentFile=/etc/idk-downloader.env
 
 Restart=on-failure
 RestartSec=5
@@ -40,7 +40,7 @@ ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
-ReadWritePaths=/var/lib/hdrezka-grabber
+ReadWritePaths=/var/lib/idk-downloader
 
 [Install]
 WantedBy=multi-user.target

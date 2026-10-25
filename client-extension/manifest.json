@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "HDrezka Grabber → Сервер",
+  "name": "idk downloader → Сервер",
   "version": "0.9.0",
-  "description": "Отправляет ссылку на видео со страницы hdrezka на ваш сервер загрузок: файл качается сразу на сервер.",
+  "description": "Отправляет ссылку на видео со страницы hdrezka на ваш сервер загрузок: файл качается сразу на сервер. Основано на HDrezka-Grabber (kristal374).",
   "minimum_chrome_version": "111",
   "browser_specific_settings": {
     "gecko": {
-      "id": "hdzg-server-client@local",
-      "strict_min_version": "128.0",
+      "id": "idk-downloader-client@local",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["none"]
       }
@@ -26,6 +26,6 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "HDrezka Grabber → Сервер"
+    "default_title": "idk downloader → Сервер"
   }
 }

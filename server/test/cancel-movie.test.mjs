@@ -6,7 +6,7 @@ import path from 'node:path';
 
 // Папку загрузок и базу задаём до импорта модулей: config читает окружение при
 // импорте, поэтому тест живёт на своей временной папке и ничего не ломает в рабочей.
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hdzg-cancel-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'idk-cancel-'));
 const downloads = path.join(tmpDir, 'downloads');
 fs.mkdirSync(downloads, { recursive: true });
 process.env.DB_FILE = path.join(tmpDir, 'grabber.db');

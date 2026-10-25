@@ -69,10 +69,10 @@ export const config = {
 };
 
 export function usage() {
-  return `HDrezka Grabber Server ${config.version} — сервер загрузок с веб-мордой
+  return `idk downloader ${config.version} — сервер загрузок с веб-мордой
 
 Использование:
-  hdrezka-grabber-server [--port <номер>]
+  idk-downloader [--port <номер>]
   node src/index.js [--port <номер>]
 
 Опции:
