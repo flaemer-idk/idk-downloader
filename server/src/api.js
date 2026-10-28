@@ -8,6 +8,8 @@ import * as mango from './mango/index.js';
 import { estimateRemaining } from './estimate.js';
 import { log } from './logger.js';
 import { prepareTask } from './tasks.js';
+import { parseLibraryRules } from './util.js';
+import * as rezka from './rezka.js';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -18,6 +20,18 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
 };
+
+function enqueueTasks(incoming) {
+  const normalized = incoming.map(prepareTask);
+  return normalized.map((task) => db.serializeTask(db.createTask(task)));
+}
+
+function publicSettings(settings) {
+  return {
+    ...settings,
+    library_rules: parseLibraryRules(settings),
+  };
+}
 
 function send(res, status, data) {
   const body = JSON.stringify(data);
@@ -58,9 +72,7 @@ function diskSpace(dir) {
 
 /**
  * Состояние места: свободно на диске и сколько ещё нужно очереди.
- * Место считаем по той папке, куда файлы реально пишутся: если настроена
- * медиатека (library_dir), настройка папки загрузок тут ни при чём —
- * иначе «свободно 200 ГБ» относилось бы к другому диску.
+ * Место считаем по папке, куда файлы реально пишутся (`download_dir`).
  */
 function spaceSummary() {
   const settings = db.getSettings();
@@ -98,7 +110,7 @@ async function handleApi(req, res, url) {
         // Реальная папка, куда пишутся файлы (медиатека, если настроена),
         // и место именно по ней.
         saveDir: space.dir,
-        libraryDir: settings.library_dir || null,
+        libraryDir: null,
         freeSpace: space.freeSpace,
         totalSpace: space.totalSpace,
         needBytes: space.needBytes,
@@ -110,9 +122,31 @@ async function handleApi(req, res, url) {
         mangoActive: mango.activeJobsCount(),
       },
       stats: db.getStats(),
-      settings,
+      settings: publicSettings(settings),
       tasks: db.listTasks(limit).map(db.serializeTask),
     });
+  }
+
+  if (pathname === '/api/tasks/preview' && method === 'POST') {
+    const body = await readJson(req);
+    try {
+      return send(res, 200, await rezka.preview(body.url));
+    } catch (error) {
+      return send(res, 400, { error: String(error?.message || error) });
+    }
+  }
+
+  if (pathname === '/api/tasks/rezka' && method === 'POST') {
+    const body = await readJson(req);
+    try {
+      const rawTasks = await rezka.resolveSelections(body.items);
+      if (!rawTasks.length) return send(res, 400, { error: 'Нечего добавлять' });
+      const created = enqueueTasks(rawTasks);
+      log.info(`Rezka: в очередь добавлено задач: ${created.length}`);
+      return send(res, 201, { created: created.length, tasks: created });
+    } catch (error) {
+      return send(res, 400, { error: String(error?.message || error) });
+    }
   }
 
   if (pathname === '/api/tasks' && method === 'POST') {
@@ -121,14 +155,12 @@ async function handleApi(req, res, url) {
     if (incoming.length === 0) return send(res, 400, { error: 'Пустой список задач' });
     if (incoming.length > 2000) return send(res, 400, { error: 'Слишком много задач за раз (максимум 2000)' });
 
-    let normalized;
+    let created;
     try {
-      normalized = incoming.map(prepareTask);
+      created = enqueueTasks(incoming);
     } catch (error) {
       return send(res, 400, { error: String(error?.message || error) });
     }
-
-    const created = normalized.map((task) => db.serializeTask(db.createTask(task)));
     log.info(
       `В очередь добавлено задач: ${created.length}` +
         (created[0] ? ` (${created[0].filename}${created.length > 1 ? ' и др.' : ''})` : ''),
@@ -289,6 +321,24 @@ async function handleApi(req, res, url) {
     }
   }
 
+  const mangoMove = /^\/api\/mango\/series\/([^/]+)\/chapters\/move$/.exec(pathname);
+  if (mangoMove && method === 'POST') {
+    const body = await readJson(req);
+    try {
+      return send(
+        res,
+        200,
+        await mango.moveChapters(
+          decodeURIComponent(mangoMove[1]),
+          body.chapterIds,
+          body.targetVolume,
+        ),
+      );
+    } catch (error) {
+      return send(res, 400, { error: String(error?.message || error) });
+    }
+  }
+
   // «Отменить это произведение»: все живые задания тайтла (ключ comx:<id>).
   const mangoSeriesAction = /^\/api\/mango\/series\/([^/]+)\/(cancel|pause|resume|delete)$/.exec(
     pathname,
@@ -321,7 +371,7 @@ async function handleApi(req, res, url) {
   }
 
   if (pathname === '/api/settings' && method === 'GET') {
-    return send(res, 200, db.getSettings());
+    return send(res, 200, publicSettings(db.getSettings()));
   }
 
   if (pathname === '/api/settings' && method === 'PATCH') {
@@ -351,14 +401,8 @@ async function handleApi(req, res, url) {
     }
 
     if (body.library_dir !== undefined) {
-      const dir = String(body.library_dir).trim();
-      if (dir) {
-        const resolvedLibrary = path.resolve(dir);
-        await fsp.mkdir(resolvedLibrary, { recursive: true });
-        patch.library_dir = resolvedLibrary;
-      } else {
-        patch.library_dir = '';
-      }
+      // Removed feature: download_dir is the library root.
+      patch.library_dir = '';
     }
 
     if (body.mango_dir !== undefined) {
@@ -384,11 +428,42 @@ async function handleApi(req, res, url) {
       patch.library_categories = String(body.library_categories).replace(/\r/g, '').slice(0, 4000);
     }
 
+    if (body.library_rules !== undefined) {
+      let rules = body.library_rules;
+      if (typeof rules === 'string') {
+        try {
+          rules = JSON.parse(rules);
+        } catch {
+          return send(res, 400, { error: 'library_rules: некорректный JSON' });
+        }
+      }
+      if (!Array.isArray(rules)) return send(res, 400, { error: 'library_rules: нужен массив' });
+      patch.library_rules = JSON.stringify(
+        rules
+          .filter((rule) => rule && typeof rule === 'object' && rule.folder)
+          .map((rule) => ({
+            section: String(rule.section || 'films').toLowerCase(),
+            kind: String(rule.kind || 'any').toLowerCase(),
+            rating: String(rule.rating || 'any'),
+            folder: String(rule.folder).slice(0, 150),
+          })),
+      );
+    }
+
+    if (body.rezka_cookies !== undefined) {
+      patch.rezka_cookies = String(body.rezka_cookies).replace(/\r/g, '').slice(0, 30000);
+    }
+
     if (body.overwrite_existing !== undefined) {
       patch.overwrite_existing = body.overwrite_existing ? '1' : '0';
     }
 
-    for (const key of ['filename_template_film', 'filename_template_series', 'filename_template_subtitle']) {
+    for (const key of [
+      'filename_template_film',
+      'filename_template_series',
+      'filename_template_subtitle',
+      'filename_template_mango',
+    ]) {
       if (body[key] === undefined) continue;
       const value = String(body[key]).trim();
       if (!value) return send(res, 400, { error: `Пустой шаблон ${key}` });
@@ -396,7 +471,7 @@ async function handleApi(req, res, url) {
     }
 
     db.setSettings(patch);
-    return send(res, 200, db.getSettings());
+    return send(res, 200, publicSettings(db.getSettings()));
   }
 
   return send(res, 404, { error: 'Не найдено' });

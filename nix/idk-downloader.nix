@@ -14,8 +14,7 @@
 #     port = 8080;
 #     openFirewall = true;
 #     dataDir = "/idkselfhost/idk-downloader";                # база (история + настройки)
-#     downloadDir = "/idkselfhost/idk-downloader/downloads";  # куда качать без медиатеки
-#     libraryDir = "/idkselfhost/Media";               # опционально: качать сразу в медиатеку
+#     downloadDir = "/idkselfhost/idk-downloader/downloads";  # корень библиотеки
 #     mangoDir = "/idkselfhost/Manga";                 # опционально: куда складывать мангу
 #     extraPackages = [ pkgs.ffmpeg ];                 # опционально: .m3u8 (HLS)
 #     # Chromium для манга-источников берётся из nixpkgs автоматически
@@ -28,7 +27,7 @@
 #   nix-prefetch-url --unpack https://github.com/flaemer-idk/idk-downloader/archive/refs/tags/<тег>.tar.gz
 #
 # Что за сервис: см. README.md репозитория. Из командной строки у сервера
-# настраивается только порт; остальное (папки, шаблоны имён, медиатека, лимиты) —
+# настраивается только порт; остальное (папки, шаблоны имён, категории, лимиты) —
 # в веб-морде на http://<хост>:<порт>/.
 {
   config,
@@ -153,7 +152,7 @@ in
       type = lib.types.str;
       default = "idk-downloader";
       description = ''
-        Группа сервиса. Если медиатека лежит в общей папке (например, для Jellyfin),
+        Группа сервиса. Если папка загрузок лежит в общей папке (например, для Jellyfin),
         укажите ту же группу, что у медиасервера.
       '';
     };
@@ -170,15 +169,6 @@ in
       description = "Каталог загрузок.";
     };
 
-    libraryDir = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = ''
-        Каталог медиатеки: если задан, файлы качаются сразу туда (начальное значение,
-        потом можно поменять в веб-морде). Категории (Фильмы/Сериалы/Аниме/…)
-        настраиваются там же.
-      '';
-    };
 
     mangoDir = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
@@ -249,8 +239,7 @@ in
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0750 ${cfg.user} ${cfg.group} -"
       "d ${cfg.downloadDir} 0750 ${cfg.user} ${cfg.group} -"
-    ] ++ lib.optional (cfg.libraryDir != null) "d ${cfg.libraryDir} 0775 ${cfg.user} ${cfg.group} -"
-    ++ lib.optional (cfg.mangoDir != null) "d ${cfg.mangoDir} 0755 ${cfg.user} ${cfg.group} -";
+    ] ++ lib.optional (cfg.mangoDir != null) "d ${cfg.mangoDir} 0755 ${cfg.user} ${cfg.group} -";
 
     systemd.services.idk-downloader = {
       description = "idk downloader";
@@ -266,8 +255,6 @@ in
         HOST = cfg.host;
         DB_FILE = "${cfg.dataDir}/grabber.db";
         DOWNLOAD_DIR = cfg.downloadDir;
-      } // lib.optionalAttrs (cfg.libraryDir != null) {
-        LIBRARY_DIR = cfg.libraryDir;
       } // lib.optionalAttrs (cfg.mangoDir != null) {
         MANGO_DIR = cfg.mangoDir;
       } // cfg.extraEnvironment;
@@ -282,7 +269,6 @@ in
         RestartSec = 5;
         EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
         RequiresMountsFor = [ cfg.downloadDir ]
-          ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir
           ++ lib.optional (cfg.mangoDir != null) cfg.mangoDir;
 
         # Ограничения доступа (серверу нужен только сеть и свои каталоги)
@@ -292,10 +278,11 @@ in
         ProtectHome = true;
         ProtectKernelTunables = true;
         ProtectControlGroups = true;
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+        # AF_NETLINK нужен libuv (os.networkInterfaces()), без него Node падает
+        # с errno 97 на uv_interface_addresses
+        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" "AF_NETLINK" ];
         CapabilityBoundingSet = "";
         ReadWritePaths = [ cfg.dataDir cfg.downloadDir ]
-          ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir
           ++ lib.optional (cfg.mangoDir != null) cfg.mangoDir;
       } // cfg.extraServiceConfig;
     };

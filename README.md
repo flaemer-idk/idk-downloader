@@ -10,70 +10,11 @@ cd server && npm install     # одна зависимость: puppeteer-core (
 node server/src/index.js --port 8080
 ```
 
-Переменные: `PORT`, `HOST`, `DB_FILE`,
-`DOWNLOAD_DIR`, `LIBRARY_DIR` (начальное значение папки медиатеки),
-`MANGO_DIR` (начальное значение папки манги), `CHROMIUM_PATH` (браузер только
-для com-x.life; MangaDex и MangaLib идут через API), `AUTH_TOKEN`, `FFMPEG_PATH`,
+Переменные: `PORT`, `HOST`, `DB_FILE`, `DOWNLOAD_DIR`,
+`MANGO_DIR`, `CHROMIUM_PATH`, `AUTH_TOKEN`, `FFMPEG_PATH`,
 `USER_AGENT`.
 
-Данные по умолчанию: база — `server/data/grabber.db`, загрузки — `server/downloads/`.
-
-## Манга
-
-Во вкладке «Манга» веб-морды вставляете ссылку на тайтл с **com-x.life**,
-**MangaDex** или **MangaLib** и жмёте «Добавить». MangaDex и MangaLib
-разбираются через API (без браузера); com-x.life — через **безголовый Chromium**
-(антибот DleGuard пропускает только настоящий браузер — расширение и cookies не
-нужны, можно хоть с телевизора). Chromium запускается лениво, только на время
-разбора страницы com-x.life: при старте `node` браузер не поднимается и в памяти
-не висит. Дальше — главы с галочками и скачивание выбранных. У MangaDex есть
-языковые чипы: набор языков приходит из API, по умолчанию русский, а главы не
-на русском получают суффикс `[en]`, чтобы не смешиваться с русскими. Сам
-`mangadex.org` при этом не нужен: адаптер ходит только на `api.mangadex.org` и
-CDN, поэтому блокировка сайта не мешает. MangaLib работает через
-`api.imglib.info` (резерв — `api.cdnlibs.org`), картинки — с `img3.cdnlibs.org`
-и зеркал.
-
-Структура на диске:
-
-```
-Манга/Суи и Нери с закатной планеты [2020]/
-├── Volume 1/
-│   ├── 1/
-│   │   ├── 000.webp
-│   │   └── 001.webp
-│   ├── 1 [en]/                 ← MangaDex, не русский язык
-│   └── 2.5 - Экстра/
-└── Volume 2/12/
-```
-
-Обложку (`Cover.png`) в папку тайтла кладёте сами — программа её не качает и не
-трогает. Уже скачанные главы пропускаются (по истории и по папке на диске); если
-выбрано только скачанное — будет предупреждение. Chromium берётся системный
-(`CHROMIUM_PATH` или поиск по типовым путям/PATH): на NixOS он уже есть, в
-модуле ставится автоматически; но он нужен только com-x.life. Подробности и
-дизайн — [`mango.md`](mango.md) (исторический прототип —
-`prototypes/mango/mango.md`).
-
-## Полигон для дизайна
-
-[`frontend-playground/`](frontend-playground/) — отдельная полная копия
-веб-морды с демо-данными и без бэкенда. Нужна, чтобы спокойно менять дизайн,
-историю, добавлять новые вкладки и не ломать рабочий интерфейс. Внутри уже
-есть очередь, история, Mango и настройки, редактор томов с переносом глав и
-каскадом (как в сценарии MangaLib: том 6 — 12 глав, том 7 — 8), новые правила
-Categories с 16+/18+ и макет Rezka cookies. Add by link разбирает франшизу или
-закладки в карточки с качеством, озвучкой, сериями и «скачать заново».
-
-```bash
-cd frontend-playground
-node serve.mjs
-# http://127.0.0.1:4173/
-```
-
-Подробности — в [`frontend-playground/README.md`](frontend-playground/README.md),
-план переноса в боевой код — в
-[`frontend-playground/PORTING.md`](frontend-playground/PORTING.md).
+Данные по умолчанию `server/data/grabber.db`, загрузки `server/downloads/`.
 
 ## Расширение
 1. Chrome/Edge/Opera: `chrome://extensions` → «Режим разработчика» → «Загрузить
@@ -96,7 +37,7 @@ cp nix/idk-downloader.nix ~/nix/Custom/idk/module.nix
 и подключите так типо:
 
 ```nix
-# ~/nixos/Custom/idk/default.nix (или где у вас список импортов)
+# ~/nixos/Custom/idk/default.nix
 { ... }:
 {
   imports = [ ./Custom/idk/module.nix ];
@@ -107,15 +48,11 @@ cp nix/idk-downloader.nix ~/nix/Custom/idk/module.nix
     openFirewall = true;         # открыть чтобы например клиент хз ноутбук другой видел мог типо да
     dataDir = "/idkselfhost/idk-downloader";              # где будет лежать история/настройки
     downloadDir = "/idkselfhost/idk-downloader/downloads"; # куда качать
-    libraryDir = "/idkselfhost/Media";              # качать сразу в медиатеку опционально я хз зачем уберется потом 
     extraPackages = [ pkgs.ffmpeg ];                # для .m3u8 (HLS) собирать чтобы
   };
 }
 ```
 
-Модуль создаёт системного пользователя `idk-downloader`, каталоги, systemd-сервис
-с ограничениями (`ProtectSystem=strict`, `ReadWritePaths` только на свои папки) и
-открывает порт в фаерволе при `openFirewall = true`.
 
 ## Nix снежинки flakes 
 
@@ -155,13 +92,12 @@ nix build .#idk-downloader                # собрать пакет
     openFirewall = true;         # открыть чтобы например клиент хз ноутбук другой видел мог типо да
     dataDir = "/idkselfhost/idk-downloader";              # где будет лежать история/настройки
     downloadDir = "/idkselfhost/idk-downloader/downloads"; # куда качать
-    libraryDir = "/idkselfhost/Media";              # качать сразу в медиатеку опционально я хз зачем уберется потом 
     extraPackages = [ pkgs.ffmpeg ];                # для .m3u8 (HLS) собирать чтобы
   };
 }
 ```
 
-## не  NixOS система хз не тестировалось кстати
+## не  NixOS система хз не тестировалось незнаю
 
 Готовый юнит: `server/deploy/idk-downloader.service`
 (скопировать в `/etc/systemd/system/`, поправить `ExecStart`/`User`/пути).

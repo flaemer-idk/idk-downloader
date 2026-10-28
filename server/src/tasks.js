@@ -41,6 +41,12 @@ export function prepareTask(raw) {
         : null,
     year: raw.year ? String(raw.year) : null,
     category: raw.category ? String(raw.category) : null,
+    kind: raw.kind
+      ? String(raw.kind)
+      : raw.season || raw.episode
+        ? 'series'
+        : 'film',
+    rating: raw.rating ? String(raw.rating) : 'any',
     file_type: fileType,
     subtitle_lang:
       raw.subtitle_lang || raw.subtitleLang ? String(raw.subtitle_lang || raw.subtitleLang) : null,

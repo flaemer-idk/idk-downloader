@@ -82,6 +82,27 @@ export function uniqueFolderName(base, exists) {
   throw new Error('не удалось подобрать свободную папку тайтла');
 }
 
+/**
+ * Шаблон пути манги. Возвращает сегменты без пустых частей; первый сегмент —
+ * папка тайтла, последний — папка главы.
+ */
+export function mangoTemplateParts(template, data = {}) {
+  const yearPart = data.year ? ` [${data.year}]` : '';
+  const chapterTitlePart = data.chapterTitle ? ` - ${data.chapterTitle}` : '';
+  const text = String(template || '')
+    .split('%orig_title%').join(String(data.title || ''))
+    .split('%year_part%').join(yearPart)
+    .split('%volume%').join(String(data.volume || ''))
+    .split('%chapter%').join(String(data.number || ''))
+    .split('%chapter_title_part%').join(chapterTitlePart)
+    .replace(/%[a-zA-Z_]+%/g, '')
+    .replace(/\[\s*\]/g, '');
+  return text
+    .split(/[\\/]+/)
+    .map(sanitizeName)
+    .filter(Boolean);
+}
+
 /** Имя страницы: 000.webp; при ≥1000 страниц — 0000.webp. */
 export function pageFileName(index, total, ext) {
   const width = total >= 1000 ? 4 : 3;

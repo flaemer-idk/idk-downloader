@@ -31,6 +31,7 @@ import {
   seriesFolderName,
   uniqueFolderName,
   pageFileName,
+  mangoTemplateParts,
 } from './naming.js';
 
 /** Корень манго-библиотеки: настройка mango_dir, иначе подпапка mango в загрузках. */
@@ -76,7 +77,13 @@ function ensureSeriesFolder(info) {
     return info;
   }
 
-  const folder = uniqueFolderName(info.folder, (candidate) => {
+  const settings = db.getSettings();
+  const template = String(settings.filename_template_mango || '').trim();
+  const templateFolder = template
+    ? mangoTemplateParts(template, { title: info.title, year: info.year })[0]
+    : '';
+  const baseFolder = templateFolder || info.folder;
+  const folder = uniqueFolderName(baseFolder, (candidate) => {
     const row = db.getMangoSeriesByFolder(candidate);
     return Boolean(row && row.series_key !== info.seriesKey);
   });
@@ -90,11 +97,28 @@ function finalizeInfo(info) {
   const settings = db.getSettings();
   const seriesDir = path.join(mangoRoot(settings), info.folder);
   const { active, activeChapters } = activeFor(info.seriesKey);
+  const overrides = db.listMangoOverrides(info.seriesKey);
+  const mangoTemplate = String(settings.filename_template_mango || '').trim();
 
-  const chapters = (info.chapters || []).map((chapter) => {
-    const chapterDir = path.join(seriesDir, `Volume ${chapter.volume}`, chapter.folder);
+  const chapters = (info.chapters || []).map((rawChapter) => {
+    const chapter = overrides.has(String(rawChapter.id))
+      ? { ...rawChapter, volume: overrides.get(String(rawChapter.id)) }
+      : rawChapter;
+    const parts = mangoTemplate
+      ? mangoTemplateParts(mangoTemplate, {
+          title: info.title,
+          year: info.year,
+          volume: chapter.volume,
+          number: chapter.number,
+          chapterTitle: chapter.title,
+        })
+      : [];
+    const languageSuffix = String(chapter.folder || '').match(/\[[a-z]{2}\]$/i)?.[0] || '';
+    const folder = parts.length ? parts[parts.length - 1] + languageSuffix : chapter.folder;
+    const chapterDir = path.join(seriesDir, `Volume ${chapter.volume}`, folder);
     return {
       ...chapter,
+      folder,
       downloaded:
         db.mangoChapterDownloaded(info.seriesKey, String(chapter.id)) ||
         fs.existsSync(chapterDir),
@@ -297,6 +321,7 @@ export async function deleteSeries(seriesKey) {
     await fsp.rmdir(dir).catch(() => {});
   }
   db.deleteMangoChapters(key);
+  db.deleteMangoOverrides(key);
   db.deleteMangoSeries(key);
   for (const job of seriesJobs) jobs.delete(job.id);
   log.info(`манга: удалено произведение ${key} — томов: ${deletedVolumes}`);
@@ -330,6 +355,7 @@ export async function deleteVolume(seriesKey, volume) {
     if (match) await fsp.rm(path.join(dir, match.name), { recursive: true, force: true });
   }
 
+  db.deleteMangoVolumeOverrides(key, volumeStr);
   const removed = db.deleteMangoVolume(key, volumeStr);
   // Если после удаления тома папка тайтла опустела — убираем и её
   // (Cover.png и прочие файлы юзера не дадут ей удалиться).
@@ -345,6 +371,115 @@ export async function deleteVolume(seriesKey, volume) {
   }
   log.info(`манга: удалён том ${volumeStr} (${key}), записей: ${removed}`);
   return { deleted: removed, volume: volumeStr };
+}
+
+function chapterNumberValue(chapter) {
+  const value = Number.parseFloat(String(chapter.number).replace(',', '.'));
+  return Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * Переносит главы одного тома в другой. Каскад сохраняет непрерывность:
+ * при переходе вперёд едут главы от выбранной до конца тома, назад — от
+ * начала тома до выбранной. Файлы переименовываются вместе с `.idk-part`.
+ */
+export async function moveChapters(seriesKey, chapterIds, targetVolume) {
+  const key = String(seriesKey);
+  const series = db.getMangoSeries(key);
+  if (!series) throw new Error('Тайтл не найден');
+  if ([...jobs.values()].some((job) => job.seriesKey === key && job.status === 'running')) {
+    throw new Error('Сначала поставьте загрузку на паузу');
+  }
+
+  const info = await resolveManga(series.url, { language: series.language });
+  const ids = new Set((Array.isArray(chapterIds) ? chapterIds : []).map(String));
+  const selected = info.chapters.filter((chapter) => ids.has(String(chapter.id)));
+  if (!selected.length) throw new Error('Выберите хотя бы одну главу');
+
+  const source = String(selected[0].volume);
+  if (selected.some((chapter) => String(chapter.volume) !== source)) {
+    throw new Error('Главы должны быть из одного тома');
+  }
+  const target = String(targetVolume).trim();
+  const targetNumber = Number(target);
+  if (!Number.isInteger(targetNumber) || targetNumber < 1) {
+    throw new Error('Укажите номер тома: целое число от 1');
+  }
+  if (target === source) throw new Error('Это тот же том');
+
+  const sourceChapters = info.chapters
+    .filter((chapter) => String(chapter.volume) === source)
+    .sort((a, b) => chapterNumberValue(a) - chapterNumberValue(b));
+  const delta = targetNumber - Number(source);
+  const selectedNumbers = selected.map(chapterNumberValue);
+  const edge = delta > 0 ? Math.min(...selectedNumbers) : Math.max(...selectedNumbers);
+  const moving = sourceChapters.filter((chapter) =>
+    delta > 0 ? chapterNumberValue(chapter) >= edge : chapterNumberValue(chapter) <= edge,
+  );
+  if (!moving.length) throw new Error('Нечего переносить');
+
+  const settings = db.getSettings();
+  const seriesDir = path.join(mangoRoot(settings), info.folder);
+  const sourceVolumeDir = path.join(seriesDir, `Volume ${source}`);
+  let filesMoved = 0;
+
+  // Preflight: a collision halfway through would leave a partially moved
+  // volume with overrides for only some chapters.
+  for (const chapter of moving) {
+    const targetDir = path.join(seriesDir, `Volume ${target}`, chapter.folder);
+    if (fs.existsSync(targetDir) || fs.existsSync(targetDir + '.idk-part')) {
+      throw new Error(`В томе ${target} уже есть папка «${chapter.folder}»`);
+    }
+  }
+
+  for (const chapter of moving) {
+    const folder = chapter.folder;
+    const sourceDir = path.join(sourceVolumeDir, folder);
+    const targetDir = path.join(seriesDir, `Volume ${target}`, folder);
+    const sourcePart = sourceDir + '.idk-part';
+    const targetPart = targetDir + '.idk-part';
+
+    await fsp.mkdir(path.dirname(targetDir), { recursive: true });
+    if (fs.existsSync(sourceDir)) {
+      await fsp.rename(sourceDir, targetDir);
+      filesMoved += 1;
+    }
+    if (fs.existsSync(sourcePart)) {
+      await fsp.rename(sourcePart, targetPart);
+      filesMoved += 1;
+    }
+    db.setMangoOverride(key, chapter.id, target);
+    db.updateMangoChapterVolume(key, chapter.id, target);
+  }
+
+  // Update paused jobs: both UI entries and the objects runJob() holds.
+  for (const job of jobs.values()) {
+    if (job.seriesKey !== key) continue;
+    for (const entry of job.chapters) {
+      if (ids.has(String(entry.id)) || moving.some((chapter) => String(chapter.id) === String(entry.id))) {
+        entry.volume = target;
+      }
+    }
+    for (const chapter of job.pendingChapters || []) {
+      if (moving.some((item) => String(item.id) === String(chapter.id))) {
+        chapter.volume = target;
+      }
+    }
+  }
+
+  if (fs.existsSync(sourceVolumeDir)) {
+    const left = await fsp.readdir(sourceVolumeDir).catch(() => []);
+    if (!left.length) await fsp.rmdir(sourceVolumeDir).catch(() => {});
+  }
+
+  log.info(`манга: ${moving.length} глав перенесены из тома ${source} в ${target} (${key})`);
+  return {
+    moved: moving.length,
+    filesMoved,
+    from: source,
+    to: target,
+    numbers: moving.map((chapter) => String(chapter.number)),
+  };
 }
 
 function sleep(ms) {
@@ -610,6 +745,9 @@ export async function createDownload(rawUrl, chapterIds = [], options = {}) {
       error: null,
     })),
   };
+  // Keep the exact objects runJob() is iterating over: a paused edit must
+  // change their volume too, not only the UI copy in job.chapters.
+  job.pendingChapters = toDownload;
   jobs.set(job.id, job);
   log.info(`манга: «${info.title}» — в очередь ${toDownload.length} глав`);
 

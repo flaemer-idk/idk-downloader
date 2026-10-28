@@ -52,7 +52,7 @@ var I18N = {
       'server.ffmpegNo': 'missing',
       'sub.queue': '{n} {groups} · downloading {dl}',
       'sub.history': '{n} {records}',
-      'sub.settings': 'Downloads, media library and name templates',
+      'sub.settings': 'Download folder and name templates',
       'kpi.downloading': 'Downloading',
       'kpi.queued': 'Queued',
       'kpi.done': 'Done',
@@ -119,16 +119,23 @@ var I18N = {
       'history.shownFirst': 'Showing first {n} records — refine the search',
       'modal.title': 'Add by link',
       'modal.close': 'Close',
-      'modal.url': 'Direct link (mp4 / m3u8 / vtt)',
-      'modal.urlErr': 'Enter a direct link to a file.',
-      'modal.urlHint': 'Normally the browser extension sends tasks here by itself — use this form only when you already have a direct file link.',
+      'modal.url': 'Link — file, title, franchise or favorites',
+      'modal.urlErr': 'Enter a link.',
+      'modal.urlHint': 'The resolver decides: direct file, title page, franchise or favorites. Cookies for favorites live in Settings.',
+      'modal.quality': 'Quality',
+      'modal.qualityAuto': 'Auto — best available',
+      'modal.qualityHint': 'Same presets as the extension; “Ultra” is preferred when the source has it.',
+      'modal.subLang': 'Subtitles',
+      'modal.subNone': "Don't download",
+      'modal.subHint': 'Russian is on by default; subtitles are separate VTT files.',
+      'modal.subsCheck': 'Download subtitles',
       'modal.name': 'File name',
       'modal.namePh': 'movie (2024).mp4',
       'modal.nameHint': 'Optional. Empty — taken from the link.',
       'modal.referer': 'Referer',
       'modal.refererHint': 'Optional. Sent with requests to the CDN.',
       'modal.cancel': 'Cancel',
-      'modal.add': 'Add to queue',
+      'modal.add': 'Add selected',
       'toast.addedN': 'Added to the queue: {n}',
       'toast.pausedAll': 'Paused: {n} {tasks}',
       'toast.noActive': 'No active downloads',
@@ -158,17 +165,17 @@ var I18N = {
       'set.langHint': 'Applies immediately, the choice is remembered.',
       'set.downloads': 'Downloads',
       'set.dir': 'Download folder on the server',
-      'set.dirHint': 'Absolute path where files land before being sorted into the library.',
+      'set.dirHint': 'This is the library root: category folders are created directly here, e.g. /home/demo/Downloads/морковные фильмы.',
       'set.simul': 'Simultaneous downloads',
       'set.range116': 'From 1 to 16',
       'set.retries': 'Attempts per task',
       'set.range150': 'From 1 to 50',
       'set.delay': 'Delay between attempts, sec',
       'set.overwrite': 'Overwrite finished files on re-download (no “ (1)” suffix)',
-      'set.library': 'Media library',
+      'set.library': 'Library categories',
       'set.libDir': 'Library folder',
       'set.libHint': 'Empty — download into the downloads folder; otherwise files are sorted into the library by categories.',
-      'set.cats': 'Categories → library folders',
+      'set.cats': 'Categories → folders',
       'set.catsHint': 'One line per category: <code>section = folder</code>, e.g. <code>films = Movies</code>. The key <code>default</code> catches everything not listed.',
       'set.mango': 'Manga',
       'set.mangoDir': 'Manga folder',
@@ -198,6 +205,10 @@ var I18N = {
       'mango.downloadN': 'Download {n} {chapters}',
       'mango.volumesTitle': 'Volumes · {n} {chapters}',
       'mango.volumeName': 'Volume {n}',
+      'mango.editVolumes': 'Edit volumes',
+      'mango.moveTo': 'Move to',
+      'mango.moveApply': 'Move',
+      'mango.volumeEditTitle': 'Volumes · {title}',
       'mango.next': 'next: {label}',
       'mango.inHistory': 'in history',
       'mango.cancelSeries': 'Cancel title',
@@ -222,6 +233,8 @@ var I18N = {
       'set.tplFilm': 'Name template: movies',
       'set.tplSeries': 'Name template: series',
       'set.tplSubs': 'Name template: subtitles',
+      'set.tplMango': 'Name template: mango',
+      'set.tplMangoHint': 'Placeholders: %orig_title%, %year_part%, %volume%, %chapter%, %chapter_title_part%. Pages stay 000.ext.',
       'set.tplExamples': 'Preview examples: movie — “Minions” (2015); series — “The Shining” (1997), 3 episodes.',
       'set.phTitle': 'Template placeholders',
       'set.phHint': 'Click a placeholder to insert it into the last edited template.',
@@ -265,7 +278,7 @@ var I18N = {
       'server.ffmpegNo': 'нет',
       'sub.queue': '{n} {groups} · скачивается {dl}',
       'sub.history': '{n} {records}',
-      'sub.settings': 'Загрузки, медиатека и шаблоны имён',
+      'sub.settings': 'Папка загрузок и шаблоны имён',
       'kpi.downloading': 'Скачивается',
       'kpi.queued': 'В очереди',
       'kpi.done': 'Готово',
@@ -332,16 +345,23 @@ var I18N = {
       'history.shownFirst': 'Показаны первые {n} записей — уточните поиск',
       'modal.title': 'Добавить по ссылке',
       'modal.close': 'Закрыть',
-      'modal.url': 'Прямая ссылка (mp4 / m3u8 / vtt)',
-      'modal.urlErr': 'Укажите прямую ссылку на файл.',
-      'modal.urlHint': 'Обычно расширение браузера отправляет задачи само — эта форма нужна, только если у вас уже есть прямая ссылка на файл.',
+      'modal.url': 'Ссылка — файл, тайтл, франшиза или закладки',
+      'modal.urlErr': 'Укажите ссылку.',
+      'modal.urlHint': 'Resolver сам решит: прямой файл, страница тайтла, франшиза или закладки. Cookies для закладок — в настройках.',
+      'modal.quality': 'Качество',
+      'modal.qualityAuto': 'Авто — лучшее доступное',
+      'modal.qualityHint': 'Те же пресеты, что у расширения; «Ultra» предпочитается, если есть.',
+      'modal.subLang': 'Субтитры',
+      'modal.subNone': 'Не качать',
+      'modal.subHint': 'Русские включены по умолчанию; субтитры — отдельные VTT.',
+      'modal.subsCheck': 'Скачивать субтитры',
       'modal.name': 'Имя файла',
       'modal.namePh': 'фильм (2024).mp4',
       'modal.nameHint': 'Необязательно. Пусто — имя из ссылки.',
       'modal.referer': 'Referer',
       'modal.refererHint': 'Необязательно. Подставляется в запросы к CDN.',
       'modal.cancel': 'Отмена',
-      'modal.add': 'Добавить в очередь',
+      'modal.add': 'Добавить выбранное',
       'toast.addedN': 'Добавлено в очередь: {n}',
       'toast.pausedAll': 'Остановлено: {n} {tasks}',
       'toast.noActive': 'Активных загрузок нет',
@@ -371,17 +391,17 @@ var I18N = {
       'set.langHint': 'Применяется сразу, выбор запоминается.',
       'set.downloads': 'Загрузки',
       'set.dir': 'Папка загрузок на сервере',
-      'set.dirHint': 'Абсолютный путь, куда сохраняются файлы до разборки в медиатеку.',
+      'set.dirHint': 'Это корень медиатеки: папки категорий создаются сразу здесь, например /home/demo/Downloads/морковные фильмы.',
       'set.simul': 'Одновременных загрузок',
       'set.range116': 'От 1 до 16',
       'set.retries': 'Попыток на задачу',
       'set.range150': 'От 1 до 50',
       'set.delay': 'Пауза между попытками, сек',
       'set.overwrite': 'Перезаписывать готовые файлы при повторной загрузке (без « (1)»)',
-      'set.library': 'Медиатека',
+      'set.library': 'Категории медиатеки',
       'set.libDir': 'Папка медиатеки',
       'set.libHint': 'Пусто — качать в папку загрузок; иначе файлы раскладываются в медиатеку по категориям.',
-      'set.cats': 'Категории → папки медиатеки',
+      'set.cats': 'Категории → папки',
       'set.catsHint': 'Одна строка на категорию: <code>раздел = папка</code>, например <code>films = Фильмы</code>. Ключ <code>default</code> — папка для всего неперечисленного.',
       'set.mango': 'Манга',
       'set.mangoDir': 'Папка манги',
@@ -411,6 +431,10 @@ var I18N = {
       'mango.downloadN': 'Скачать {n} {chapters}',
       'mango.volumesTitle': 'Тома · {n} {chapters}',
       'mango.volumeName': 'Том {n}',
+      'mango.editVolumes': 'Изменить тома',
+      'mango.moveTo': 'Перенести в',
+      'mango.moveApply': 'Перенести',
+      'mango.volumeEditTitle': 'Тома · {title}',
       'mango.next': 'следующая: {label}',
       'mango.inHistory': 'в истории',
       'mango.cancelSeries': 'Отменить произведение',
@@ -435,6 +459,8 @@ var I18N = {
       'set.tplFilm': 'Шаблон имени: фильмы',
       'set.tplSeries': 'Шаблон имени: сериалы',
       'set.tplSubs': 'Шаблон имени: субтитры',
+      'set.tplMango': 'Шаблон имени: манго',
+      'set.tplMangoHint': 'Плейсхолдеры: %orig_title%, %year_part%, %volume%, %chapter%, %chapter_title_part%. Страницы остаются 000.ext.',
       'set.tplExamples': 'Примеры для предпросмотра: фильм — «Minions» (2015); сериал — «The Shining» (1997), 3 серии.',
       'set.phTitle': 'Плейсхолдеры шаблонов',
       'set.phHint': 'Нажмите на плейсхолдер, чтобы вставить его в последний редактируемый шаблон.',
@@ -663,6 +689,9 @@ function setLang(code) {
   try { localStorage.setItem('idk-lang', code); } catch (e) { /* не критично */ }
   applyI18n();
   renderAll();
+  try {
+    window.dispatchEvent(new CustomEvent('pg:lang', { detail: code }));
+  } catch (e) { /* старые браузеры */ }
 }
 
 /* ---------------- i18n: применение к DOM ---------------- */
@@ -793,6 +822,22 @@ function updateTplPreviews() {
         '<code class="tp-path" title="' + escapeHtml(r.path) + '">' + escapeHtml(r.path) + '</code></div>';
     }).join('');
   });
+
+  var mangoInp = $('set-tpl-mango'), mangoOut = $('prev-mango');
+  if (mangoInp && mangoOut) {
+    var mangoTpl = mangoInp.value.trim() ||
+      (state.settings ? state.settings.filename_template_mango : '') ||
+      '%orig_title%%year_part%/Volume %volume%/%chapter%%chapter_title_part%';
+    var mangoPath = mangoTpl
+      .split('%orig_title%').join('Суи и Нери с закатной планеты')
+      .split('%year_part%').join(' [2020]')
+      .split('%volume%').join('6')
+      .split('%chapter%').join('61')
+      .split('%chapter_title_part%').join(' - Нери')
+      .replace(/%[a-zA-Z_]+%/g, '');
+    mangoOut.innerHTML = '<div class="tp-row"><span class="tp-tag">mango</span>' +
+      '<code class="tp-path" title="' + escapeHtml(mangoPath) + '">' + escapeHtml(mangoPath) + '</code></div>';
+  }
 }
 
 var lastTplId = null;
@@ -819,13 +864,17 @@ function fillSettingsForm() {
   $('set-max-attempts').value = s.max_attempts;
   $('set-delay-s').value = Math.max(1, Math.round(Number(s.retry_delay_ms) / 1000));
   $('set-overwrite').checked = s.overwrite_existing === '1';
-  $('set-library').value = s.library_dir || '';
-  $('set-categories').value = s.library_categories || '';
+  var libraryEl = $('set-library');
+  if (libraryEl) libraryEl.value = s.library_dir || '';
+  var categoriesEl = $('set-categories');
+  if (categoriesEl) categoriesEl.value = s.library_categories || '';
   $('set-mango-dir').value = s.mango_dir || '';
   $('set-chromium').value = s.chromium_path || '';
   $('set-tpl-film').value = s.filename_template_film || '';
   $('set-tpl-series').value = s.filename_template_series || '';
   $('set-tpl-subs').value = s.filename_template_subtitle || '';
+  var mangoTplEl = $('set-tpl-mango');
+  if (mangoTplEl) mangoTplEl.value = s.filename_template_mango || '';
   $('set-lang').value = state.lang;
   updateTplPreviews();
 }
@@ -837,13 +886,14 @@ async function saveSettings() {
     max_attempts: Number($('set-max-attempts').value),
     retry_delay_ms: Math.round(clampInt($('set-delay-s').value, 1, 3600, 15) * 1000),
     overwrite_existing: $('set-overwrite').checked,
-    library_dir: $('set-library').value.trim(),
-    library_categories: $('set-categories').value,
+    library_dir: $('set-library') ? $('set-library').value.trim() : undefined,
+    library_categories: $('set-categories') ? $('set-categories').value : undefined,
     mango_dir: $('set-mango-dir').value.trim(),
     chromium_path: $('set-chromium').value.trim(),
     filename_template_film: $('set-tpl-film').value.trim(),
     filename_template_series: $('set-tpl-series').value.trim(),
-    filename_template_subtitle: $('set-tpl-subs').value.trim()
+    filename_template_subtitle: $('set-tpl-subs').value.trim(),
+    filename_template_mango: $('set-tpl-mango') ? $('set-tpl-mango').value.trim() : undefined
   };
   try {
     await api('/api/settings', { method: 'PATCH', body: JSON.stringify(body) });
@@ -866,6 +916,11 @@ function categoryFolders() {
     var name = line.slice(separator + 1).trim();
     if (name) folders.add(name);
   });
+  if (state.settings && Array.isArray(state.settings.library_rules)) {
+    state.settings.library_rules.forEach(function (rule) {
+      if (rule && rule.folder) folders.add(rule.folder);
+    });
+  }
   return folders;
 }
 
@@ -1070,6 +1125,26 @@ function toast(msg, type) {
   }, 3200);
 }
 
+/* ---------------- scroll guard ---------------- */
+
+// Пока пользователь реально скроллит (колесо/тачпад/ползунок), не трогаем
+// DOM списков: иначе перерисовка на секундном опросе может вырвать позицию
+// из-под курсора. После паузы следующий опрос отрисует актуальные данные.
+var lastScrollAt = 0;
+var suppressScrollUntil = 0;
+
+function noteScroll() {
+  if (Date.now() >= suppressScrollUntil) lastScrollAt = Date.now();
+}
+
+function isUserScrolling() {
+  return Date.now() - lastScrollAt < 1200;
+}
+
+function markProgrammaticScroll() {
+  suppressScrollUntil = Date.now() + 120;
+}
+
 /* ---------------- render: routing shell ---------------- */
 
 function currentRoute() {
@@ -1092,13 +1167,30 @@ function applyRoute() {
   renderAll();
 }
 
+function pageScroll() {
+  return [window.scrollX, window.scrollY];
+}
+
+function restorePageScroll(saved) {
+  if (window.scrollX !== saved[0] || window.scrollY !== saved[1]) {
+    markProgrammaticScroll();
+    window.scrollTo(saved[0], saved[1]);
+  }
+}
+
 function renderAll() {
+  // Поллинг перерисовывает списки каждую секунду. Без восстановления
+  // позиции браузер сбрасывает страницу наверх, и History невозможно
+  // листать. Все рендеры синхронные, поэтому до кадра браузер не успевает
+  // показать промежуточное состояние.
+  var savedScroll = pageScroll();
   renderTopbar();
   renderQueue();
   renderHistory();
   renderMango();
   renderKpi();
   renderSidebar();
+  restorePageScroll(savedScroll);
 }
 
 /* ---------------- render: topbar ---------------- */
@@ -1320,6 +1412,10 @@ function mgJobHtml(job) {
       '" type="button" data-cancel-series="' + escapeHtml(job.seriesKey) + '">' +
       escapeHtml(armedCancel ? t('act.sureCancel') : t('mango.cancelSeries')) + '</button>';
   }
+  actions += '<button class="mg-act-btn" type="button" data-edit-volumes="job"' +
+    ' data-series-key="' + escapeHtml(job.seriesKey) +
+    '" data-job-id="' + escapeHtml(job.id) + '">' +
+    escapeHtml(t('mango.editVolumes')) + '</button>';
   actions += '<button class="mg-act-btn mg-act-danger' + (armedDelete ? ' mg-act-armed' : '') +
     '" type="button" data-delete-series="' + escapeHtml(job.seriesKey) + '">' +
     escapeHtml(armedDelete ? t('act.sureDelete') : t('act.delete')) + '</button>';
@@ -1360,7 +1456,8 @@ function mgJobHtml(job) {
           chapters: tp('pl.chapters', chapters.length)
         })) +
       '</button>' +
-      '<div class="mg-vol-scroll"' + (allCollapsed ? ' hidden' : '') + '>' +
+      '<div class="mg-vol-scroll" data-scroll-key="job:' + escapeHtml(String(job.id)) + ':volumes"' +
+        (allCollapsed ? ' hidden' : '') + '>' +
         mgVolumesHtml('job' + job.id, chapters, false, mgJobRow, canDelete ? job.seriesKey : null) +
       '</div></div>';
   }
@@ -1407,6 +1504,7 @@ function mgRenderLanguages() {
 }
 
 function renderMango() {
+  var savedScroll = pageScroll();
   var m = state.mango;
   var seriesBox = $('mango-series');
   if (!seriesBox) return;
@@ -1484,19 +1582,19 @@ function renderMango() {
     // чекбокс пересоздаётся под курсором на каждом секундном опросе.
     var key = m.series.url + '|' + (m.series.source || '') + '|' + (m.series.language || '') +
       '|' + m.series.chapters.map(function (c) {
-        return c.id + (c.downloaded ? '1' : '0') + (m.selection[c.id] ? 's' : '') +
+        return c.id + ':' + c.volume + (c.downloaded ? '1' : '0') + (m.selection[c.id] ? 's' : '') +
           (c.external ? 'e' : '') + (c.unavailable ? 'u' : '') + (c.pending ? 'p' : '');
       }).join(',');
     var list = $('mango-chapters');
     if (list.dataset.key !== key) {
       list.dataset.key = key;
-      list.innerHTML = mgVolumesHtml(
+      setHtmlIfChanged(list, mgVolumesHtml(
         'sel',
         m.series.chapters,
         true,
         mgSelectionRow,
         m.series.seriesKey,
-      ) || '<div class="mg-empty">' + escapeHtml(t('mango.emptyList')) + '</div>';
+      ) || '<div class="mg-empty">' + escapeHtml(t('mango.emptyList')) + '</div>');
       mgApplyIndeterminate(list);
     }
 
@@ -1510,8 +1608,9 @@ function renderMango() {
   }
 
   // Карточки заданий (по одной на тайтл-задание).
-  $('mango-jobs').innerHTML = jobs.map(mgJobHtml).join('');
+  setHtmlIfChanged($('mango-jobs'), jobs.map(mgJobHtml).join(''));
   $('mango-empty').hidden = !!m.series || jobs.length > 0;
+  restorePageScroll(savedScroll);
 }
 
 /* ---------------- mango: действия ---------------- */
@@ -1522,7 +1621,7 @@ async function refreshMangoJobs() {
     state.mango.jobs = data.jobs || [];
     state.mango.stats = data.stats || { chapters: 0 };
     ensureMangoDetails(state.mango.jobs);
-    renderMango();
+    if (!isUserScrolling()) renderMango();
   } catch (e) { /* сетевую ошибку покажет основной опрос */ }
 }
 
@@ -1544,7 +1643,7 @@ function ensureMangoDetails(jobs) {
           chapters: (data.job && data.job.chapters) || [],
           status: job.status
         };
-        renderMango();
+        if (!isUserScrolling()) renderMango();
       })
       .catch(function () { /* карточка останется без глав */ })
       .finally(function () {
@@ -1560,7 +1659,7 @@ async function refreshMangoHistory(force) {
   try {
     var data = await api('/api/mango/history?limit=1000');
     state.mangoHistory = data.chapters || [];
-    if (state.historyMode === 'mango') renderMangoHistory();
+    if (state.historyMode === 'mango' && !isUserScrolling()) renderMangoHistory();
   } catch (e) { /* историю обновим при следующем заходе */ }
 }
 
@@ -1799,7 +1898,7 @@ function renderSidebar() {
   var need = srv.needBytes || 0;
   var short = srv.spaceEnough === false;
 
-  // Место — по папке, куда файлы реально пишутся (медиатека, если настроена);
+  // Место — по папке, куда файлы реально пишутся (download_dir);
   // «нужно» — сколько ещё понадобится всей незаконченной очереди.
   var freeText = free != null ? t('server.free', { v: formatBytes(free) }) : '—';
   if (need > 0) freeText += ' · ' + t('server.need', { v: formatBytes(need) });
@@ -2072,13 +2171,14 @@ function mgHistoryRow(entry) {
 }
 
 function renderMangoHistory() {
+  var savedScroll = pageScroll();
   var box = $('mango-history');
   var empty = $('mango-history-empty');
   if (!box) return;
   var groups = mgHistoryGroups(state.mangoHistory);
   empty.hidden = groups.length > 0;
 
-  box.innerHTML = groups.map(function (group) {
+  setHtmlIfChanged(box, groups.map(function (group) {
     var chapters = group.chapters.slice().sort(function (a, b) {
       return (parseFloat(a.volume) || 0) - (parseFloat(b.volume) || 0) ||
         (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0);
@@ -2104,6 +2204,8 @@ function renderMangoHistory() {
         created_at: c.created_at,
       };
     });
+    var allKey = 'hist:' + group.key;
+    var collapsed = state.mango.collapsed[allKey] !== false;
     return '<article class="mg-card mg-group">' +
       '<div class="mg-group-head">' +
         '<div class="mg-group-id">' +
@@ -2113,15 +2215,146 @@ function renderMangoHistory() {
             escapeHtml(tp('pl.chapters', chapters.length)) + ' · ' +
             escapeHtml(formatDate(last)) + '</div>' +
         '</div>' +
+        '<div class="mg-group-actions">' +
+          '<button class="mg-act-btn" type="button" data-edit-volumes="history"' +
+            ' data-series-key="' + escapeHtml(group.key) + '">' +
+            escapeHtml(t('mango.editVolumes')) + '</button>' +
+        '</div>' +
       '</div>' +
-      '<div class="mg-volumes-wrap"><div class="mg-vol-scroll">' +
-        mgVolumesHtml('hist' + group.key, entries, false, mgHistoryRow, group.key) +
-      '</div></div>' +
+      '<div class="mg-volumes-wrap">' +
+        '<button class="mg-files-toggle' + (collapsed ? ' mg-collapsed' : '') +
+          '" type="button" data-history-all="' + escapeHtml(allKey) + '" aria-expanded="' +
+          String(!collapsed) + '">' +
+          escapeHtml(t('mango.volumesTitle', {
+            n: chapters.length,
+            chapters: tp('pl.chapters', chapters.length)
+          })) +
+        '</button>' +
+        '<div class="mg-vol-scroll" data-scroll-key="hist:' + escapeHtml(group.key) + ':volumes"' +
+          (collapsed ? ' hidden' : '') + '>' +
+          mgVolumesHtml('hist' + group.key, entries, false, mgHistoryRow, group.key) +
+        '</div>' +
+      '</div>' +
     '</article>';
-  }).join('');
+  }).join(''));
+  restorePageScroll(savedScroll);
+}
+
+function histFileRow(task) {
+  var name = tailOf(task.filename || task.url);
+  var full = String(task.filename || task.url || '');
+  var isSub = task.fileType === 'subtitle';
+  var armedDel = isArmed('h:' + task.id + ':delete');
+  var size = task.totalBytes > 0 ? task.totalBytes : (task.receivedBytes > 0 ? task.receivedBytes : null);
+  var src = sourceUrl(task);
+  var nameHtml = src
+    ? '<a class="cf-name cf-name-link" href="' + escapeHtml(src) + '" target="_blank" rel="noreferrer" title="' +
+        escapeHtml(full) + '">' + escapeHtml(name) + '</a>'
+    : '<span class="cf-name" title="' + escapeHtml(full) + '">' + escapeHtml(name) + '</span>';
+  var note = !isSub && task.quality ? qualityWithReal(task) : '';
+  return '<div class="mg-ch-row hist-file-row" data-hist-row="' + task.id + '">' +
+    '<span class="file-ico">' + icon(isSub ? 'captions' : 'film') + '</span>' +
+    '<div class="hist-file-main">' + nameHtml +
+      (note ? '<span class="hist-file-note">' + escapeHtml(note) + '</span>' : '') +
+      (task.error ? '<span class="cf-err">' + icon('alert') + escapeHtml(task.error) + '</span>' : '') +
+    '</div>' +
+    '<span class="mg-ch-status"><span class="pill pill-' + task.status + '">' +
+      escapeHtml(t('status.' + task.status)) + '</span></span>' +
+    '<span class="hist-file-size">' + (size ? formatBytes(size) : '—') + '</span>' +
+    '<span class="hist-file-date">' + escapeHtml(formatDate(task.finishedAt)) + '</span>' +
+    '<span class="hist-file-actions">' +
+      '<button class="act-btn act-accent" type="button" data-haction="retry">' + icon('retry') +
+        '<span>' + escapeHtml(t('act.retry')) + '</span></button>' +
+      '<button class="act-btn ' + (armedDel ? 'act-armed' : 'act-danger') + '" type="button" data-haction="delete">' +
+        icon('trash') + '<span>' + escapeHtml(armedDel ? t('act.sureDelete') : t('history.deleteRec')) + '</span></button>' +
+    '</span>' +
+  '</div>';
+}
+
+function histCard(group) {
+  var files = group.files;
+  var isSeries = files.some(function (file) { return file.season != null || file.episode != null; });
+  var size = files.reduce(function (sum, file) { return sum + (file.totalBytes || file.receivedBytes || 0); }, 0);
+  var last = files.reduce(function (max, file) { return Math.max(max, file.finishedAt || file.createdAt || 0); }, 0);
+  var status = files.every(function (file) { return file.status === 'done'; }) ? 'done' : 'canceled';
+  var key = 'histfile:' + group.key;
+  var collapsed = state.collapsed[key] === true;
+  return '<article class="mg-card mg-group hist-card">' +
+    '<div class="mg-group-head">' +
+      '<div class="mg-group-id">' +
+        '<div class="mg-group-title">' +
+          '<span class="mg-group-name" title="' + escapeHtml(group.title) + '">' +
+            escapeHtml(group.title) + '</span>' +
+          '<span class="mg-pill mg-pill-' + (status === 'done' ? 'done' : 'canceled') + '">' +
+            escapeHtml(t('status.' + status)) + '</span>' +
+        '</div>' +
+        '<div class="mg-group-meta">' + escapeHtml(t('kind.' + (isSeries ? 'series' : 'movie'))) +
+          ' · ' + files.length + ' ' + escapeHtml(tp('pl.files', files.length)) +
+          ' · ' + (size ? formatBytes(size) : '—') +
+          ' · ' + escapeHtml(formatDate(last)) +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="mg-volumes-wrap">' +
+      '<button class="mg-files-toggle' + (collapsed ? ' mg-collapsed' : '') +
+        '" type="button" data-hist-files="' + escapeHtml(group.key) + '" aria-expanded="' +
+        String(!collapsed) + '">' +
+        escapeHtml(t('group.files', { n: files.length })) +
+      '</button>' +
+      '<div class="mg-vol-scroll hist-file-list" data-scroll-key="histfile:' + escapeHtml(group.key) + '"' +
+        (collapsed ? ' hidden' : '') + '>' +
+        files.map(histFileRow).join('') +
+      '</div>' +
+    '</div>' +
+  '</article>';
+}
+
+// Внутренние прокручиваемые списки (тома Mango, History) перерисовываются
+// чаще, чем нужно браузеру для сохранения scrollTop. Запоминаем позиции по
+// устойчивым data-scroll-key и возвращаем их после замены HTML.
+function captureScrollers(root) {
+  const saved = {};
+  const nodes = [];
+  if (root.matches && root.matches('[data-scroll-key]')) nodes.push(root);
+  root.querySelectorAll('[data-scroll-key]').forEach(function (el) { nodes.push(el); });
+  nodes.forEach(function (el) {
+    if (!el.scrollTop) return;
+    saved[el.getAttribute('data-scroll-key')] = el.scrollTop;
+  });
+  return saved;
+}
+
+function restoreScrollers(root, saved) {
+  if (!Object.keys(saved).length) return;
+  markProgrammaticScroll();
+  Object.keys(saved).forEach(function (key) {
+    const nodes = [];
+    if (root.matches && root.matches('[data-scroll-key]') &&
+        root.getAttribute('data-scroll-key') === key) {
+      nodes.push(root);
+    }
+    root.querySelectorAll('[data-scroll-key]').forEach(function (el) {
+      if (el.getAttribute('data-scroll-key') === key) nodes.push(el);
+    });
+    nodes.forEach(function (el) {
+      if (el.scrollTop !== saved[key]) el.scrollTop = saved[key];
+    });
+  });
+}
+
+// Не перезаписываем одинаковый HTML: иначе каждый секундный поллинг
+// сбрасывает прокрутку внутри длинного History.
+function setHtmlIfChanged(el, html) {
+  if (el.__idkHtml === html) return false;
+  const saved = captureScrollers(el);
+  el.__idkHtml = html;
+  el.innerHTML = html;
+  restoreScrollers(el, saved);
+  return true;
 }
 
 function renderHistory() {
+  var savedScroll = pageScroll();
   var mangoMode = state.historyMode === 'mango';
   $('history-files').hidden = mangoMode;
   $('history-mango').hidden = !mangoMode;
@@ -2135,50 +2368,34 @@ function renderHistory() {
 
   var rows = historyRows();
   var shown = rows.slice(0, HISTORY_RENDER_LIMIT);
-  var tb = $('history-tbody');
+  var box = $('history-cards');
   if (!rows.length) {
     var msg = state.historySearch.trim()
       ? t('history.notFound', { q: state.historySearch.trim() })
       : t('history.empty');
-    tb.innerHTML = '<tr><td colspan="5" class="td-empty">' + escapeHtml(msg) + '</td></tr>';
+    setHtmlIfChanged(box, '<div class="mg-empty-state"><div class="mg-empty-title">' +
+      escapeHtml(msg) + '</div></div>');
   } else {
-    var html = shown.map(function (task) {
-      var name = tailOf(task.filename || task.url);
-      var full = String(task.filename || task.url || '');
-      var isSub = task.fileType === 'subtitle';
-      var armedDel = isArmed('h:' + task.id + ':delete');
-      var size = task.totalBytes > 0 ? task.totalBytes : (task.receivedBytes > 0 ? task.receivedBytes : null);
-      var src = sourceUrl(task);
-      var nameHtml = src
-        ? '<a class="cf-name cf-name-link" href="' + escapeHtml(src) + '" target="_blank" rel="noreferrer" title="' +
-            escapeHtml(full) + '">' + escapeHtml(name) + '</a>'
-        : '<div class="cf-name" title="' + escapeHtml(full) + '">' + escapeHtml(name) + '</div>';
-      return '<tr data-rec="' + task.id + '">' +
-        '<td><div class="cell-file">' +
-          '<span class="file-ico">' + icon(isSub ? 'captions' : 'film') + '</span>' +
-          '<div class="cf-text">' +
-            nameHtml +
-            (!isSub && task.quality ? '<div class="cf-note">' + escapeHtml(qualityWithReal(task)) + '</div>' : '') +
-            (task.error ? '<div class="cf-err">' + icon('alert') + '<span>' + escapeHtml(task.error) + '</span></div>' : '') +
-            expiredHintHtml(task) +
-          '</div>' +
-        '</div></td>' +
-        '<td><span class="pill pill-' + task.status + '">' + escapeHtml(t('status.' + task.status)) + '</span></td>' +
-        '<td class="td-num">' + (size ? formatBytes(size) : '—') + '</td>' +
-        '<td class="td-date">' + formatDate(task.finishedAt) + '</td>' +
-        '<td class="td-act">' +
-          '<button class="act-btn act-accent" type="button" data-haction="retry">' + icon('retry') + '<span>' + escapeHtml(t('act.retry')) + '</span></button>' +
-          '<button class="act-btn ' + (armedDel ? 'act-armed' : 'act-danger') + '" type="button" data-haction="delete">' +
-            icon('trash') + '<span>' + escapeHtml(armedDel ? t('act.sureDelete') : t('history.deleteRec')) + '</span></button>' +
-        '</td>' +
-      '</tr>';
+    var groups = groupTasks(shown);
+    groups.sort(function (a, b) {
+      var la = groupFiles(a).reduce(function (m, f) { return Math.max(m, f.finishedAt || f.createdAt || 0); }, 0);
+      var lb = groupFiles(b).reduce(function (m, f) { return Math.max(m, f.finishedAt || f.createdAt || 0); }, 0);
+      return lb - la;
+    });
+    var html = groups.map(function (group) {
+      return histCard({ key: group.key, title: group.title, files: groupFiles(group) });
     }).join('');
     if (rows.length > shown.length) {
-      html += '<tr><td colspan="5" class="td-empty">' + escapeHtml(t('history.shownFirst', { n: shown.length })) + '</td></tr>';
+      html += '<div class="mg-empty-state"><div class="mg-empty-text">' +
+        escapeHtml(t('history.shownFirst', { n: shown.length })) + '</div></div>';
     }
-    tb.innerHTML = html;
+    setHtmlIfChanged(box, html);
   }
-  $('history-count').textContent = t('history.count', { shown: rows.length, total: state.stats.done + state.stats.canceled });
+  $('history-count').textContent = t('history.count', {
+    shown: rows.length,
+    total: state.stats.done + state.stats.canceled
+  });
+  restorePageScroll(savedScroll);
 }
 
 /* ---------------- actions ---------------- */
@@ -2325,6 +2542,9 @@ function closeModal() {
   $('add-form').reset();
   var f = $('f-url').closest('.field');
   if (f) f.classList.remove('is-invalid');
+  if (window.IdkUI && typeof window.IdkUI.clearParse === 'function') {
+    window.IdkUI.clearParse();
+  }
 }
 
 async function onAddSubmit(e) {
@@ -2343,10 +2563,15 @@ async function onAddSubmit(e) {
   field.classList.remove('is-invalid');
 
   var body = { url: url };
-  var name = $('f-name').value.trim();
-  var referer = $('f-referer').value.trim();
-  if (name) body.filename = name;
-  if (referer) body.referer = referer;
+  var nameEl = $('f-name');
+  var refererEl = $('f-referer');
+  if (nameEl && nameEl.value.trim()) body.filename = nameEl.value.trim();
+  if (refererEl && refererEl.value.trim()) body.referer = refererEl.value.trim();
+  if ($('f-quality')) body.quality = $('f-quality').value;
+  if ($('f-subs')) {
+    body.subtitles = $('f-subs').checked;
+    body.subtitle_lang = $('f-sub-lang') ? $('f-sub-lang').value : 'ru';
+  }
 
   state.adding = true;
   try {
@@ -2388,7 +2613,7 @@ async function refresh() {
     if (currentRoute() === 'history' && state.historyMode === 'mango') {
       refreshMangoHistory();
     }
-    renderAll();
+    if (!isUserScrolling()) renderAll();
   } catch (err) {
     if (!state.netError) toast(t('toast.netErr', { msg: err.message }), 'error');
     state.netError = err.message;
@@ -2400,8 +2625,10 @@ async function refresh() {
 
 function bindEvents() {
   window.addEventListener('hashchange', applyRoute);
+  window.addEventListener('scroll', noteScroll, true);
 
-  $('lang-switch').addEventListener('click', function (e) {
+  var langSwitch = $('lang-switch');
+  if (langSwitch) langSwitch.addEventListener('click', function (e) {
     var b = e.target.closest('[data-lang]');
     if (!b) return;
     setLang(b.getAttribute('data-lang'));
@@ -2476,12 +2703,19 @@ function bindEvents() {
     renderHistory();
   });
 
-  $('history-tbody').addEventListener('click', function (e) {
+  $('history-cards').addEventListener('click', function (e) {
+    var toggle = e.target.closest('[data-hist-files]');
+    if (toggle) {
+      var key = 'histfile:' + toggle.getAttribute('data-hist-files');
+      state.collapsed[key] = state.collapsed[key] !== true;
+      renderHistory();
+      return;
+    }
     var btn = e.target.closest('[data-haction]');
     if (!btn || btn.classList.contains('is-disabled')) return;
-    var tr = btn.closest('tr[data-rec]');
-    if (!tr) return;
-    var id = Number(tr.dataset.rec);
+    var row = btn.closest('[data-hist-row]');
+    if (!row) return;
+    var id = Number(row.dataset.histRow);
     var task = null;
     for (var i = 0; i < state.tasks.length; i++) {
       if (state.tasks[i].id === id) { task = state.tasks[i]; break; }
@@ -2528,6 +2762,11 @@ function bindEvents() {
     el.addEventListener('focus', function () { lastTplId = fd.input; });
     el.addEventListener('input', updateTplPreviews);
   });
+  var mangoTplInput = $('set-tpl-mango');
+  if (mangoTplInput) {
+    mangoTplInput.addEventListener('focus', function () { lastTplId = 'set-tpl-mango'; });
+    mangoTplInput.addEventListener('input', updateTplPreviews);
+  }
 
   $('ph-list').addEventListener('click', function (e) {
     var b = e.target.closest('[data-ph]');

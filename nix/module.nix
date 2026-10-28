@@ -9,7 +9,6 @@
 #     port = 8081;
 #     openFirewall = true;
 #     downloadDir = "/mnt/media/downloads";
-#     libraryDir = "/mnt/media/Jellyfin";      # начальное значение, дальше правится в веб-морде
 #     extraPackages = [ pkgs.ffmpeg ];          # чтобы качались .m3u8 (HLS)
 #   };
 {
@@ -64,7 +63,7 @@ in
       type = types.str;
       default = "idk-downloader";
       description = ''
-        Группа сервиса. Если медиатека лежит в общей папке (например, для Jellyfin),
+        Группа сервиса. Если папка загрузок лежит в общей папке (например, для Jellyfin),
         укажите ту же группу, что у медиасервера.
       '';
     };
@@ -81,15 +80,6 @@ in
       description = "Каталог загрузок.";
     };
 
-    libraryDir = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      description = ''
-        Каталог медиатеки: если задан, файлы качаются сразу туда (начальное значение,
-        потом можно поменять в веб-морде). Категории (Фильмы/Сериалы/Аниме/…)
-        настраиваются там же.
-      '';
-    };
 
     environmentFile = mkOption {
       type = types.nullOr types.path;
@@ -141,7 +131,7 @@ in
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0750 ${cfg.user} ${cfg.group} -"
       "d ${cfg.downloadDir} 0750 ${cfg.user} ${cfg.group} -"
-    ] ++ lib.optional (cfg.libraryDir != null) "d ${cfg.libraryDir} 0775 ${cfg.user} ${cfg.group} -";
+    ];
 
     systemd.services.idk-downloader = {
       description = "idk downloader";
@@ -157,8 +147,6 @@ in
         HOST = cfg.host;
         DB_FILE = "${cfg.dataDir}/grabber.db";
         DOWNLOAD_DIR = cfg.downloadDir;
-      } // lib.optionalAttrs (cfg.libraryDir != null) {
-        LIBRARY_DIR = cfg.libraryDir;
       } // cfg.extraEnvironment;
 
       serviceConfig = {
@@ -170,7 +158,7 @@ in
         Restart = "on-failure";
         RestartSec = 5;
         EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
-        RequiresMountsFor = [ cfg.downloadDir ] ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir;
+        RequiresMountsFor = [ cfg.downloadDir ];
 
         # Ограничения доступа (серверу нужен только сеть и свои каталоги)
         NoNewPrivileges = true;
@@ -179,10 +167,11 @@ in
         ProtectHome = true;
         ProtectKernelTunables = true;
         ProtectControlGroups = true;
-        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+        # AF_NETLINK нужен libuv (os.networkInterfaces()), без него Node падает
+        # с errno 97 на uv_interface_addresses
+        RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" "AF_NETLINK" ];
         CapabilityBoundingSet = "";
-        ReadWritePaths = [ cfg.dataDir cfg.downloadDir ]
-          ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir;
+        ReadWritePaths = [ cfg.dataDir cfg.downloadDir ];
       } // cfg.extraServiceConfig;
     };
 

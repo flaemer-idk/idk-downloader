@@ -79,14 +79,57 @@ export function parseCategoryMap(settings) {
   return map;
 }
 
-/** Папка медиатеки для категории страницы (films/series/animation/…). */
-export function categoryFolder(settings, category) {
-  if (!String(settings?.library_dir ?? '').trim()) return '';
+/** Структурированные правила: раздел + тип + рейтинг → папка. */
+export function parseLibraryRules(settings) {
+  let rules = [];
+  if (Array.isArray(settings?.library_rules)) {
+    rules = settings.library_rules;
+  } else {
+    try {
+      const parsed = JSON.parse(String(settings?.library_rules ?? '[]'));
+      if (Array.isArray(parsed)) rules = parsed;
+    } catch {
+      rules = [];
+    }
+  }
+  return rules
+    .filter((rule) => rule && typeof rule === 'object' && rule.section && rule.folder)
+    .map((rule) => ({
+      section: String(rule.section).toLowerCase(),
+      kind: String(rule.kind || 'any').toLowerCase(),
+      rating: String(rule.rating || 'any').toLowerCase().replace(/\+/g, ''),
+      folder: String(rule.folder),
+    }));
+}
+
+/**
+ * Папка медиатеки для раздела/типа/рейтинга. download_dir — корень,
+ * отдельной library_dir больше нет. Сначала ищем точное правило (16+/18+),
+ * затем общее; старый library_categories остаётся как fallback для миграции.
+ */
+export function categoryFolder(settings, category, kind = 'any', rating = 'any') {
+  const section = String(category ?? '').trim().toLowerCase();
+  const wantedKind = String(kind || 'any').toLowerCase();
+  const wantedRating = String(rating || 'any').toLowerCase().replace(/\+/g, '');
+  const rules = parseLibraryRules(settings);
+  const score = (rule) => {
+    let value = 0;
+    if (rule.section === section) value += 4;
+    if (rule.kind !== 'any') value += 1;
+    if (rule.rating !== 'any') value += 2;
+    return value;
+  };
+  const match = rules
+    .filter((rule) => rule.section === section)
+    .filter((rule) => rule.kind === 'any' || rule.kind === wantedKind)
+    .filter((rule) => rule.rating === 'any' || rule.rating === wantedRating)
+    .sort((a, b) => score(b) - score(a))[0];
+  if (match) return match.folder;
+
   const map = parseCategoryMap(settings);
-  const key = String(category ?? '').trim().toLowerCase();
-  if (key && map.has(key)) return map.get(key);
+  if (section && map.has(section)) return map.get(section);
   if (map.has('default')) return map.get('default');
-  return key;
+  return section;
 }
 
 /* ─────────────────── языки субтитров: код для имени файла ─────────────────── */
@@ -312,8 +355,10 @@ export function buildFilename(task, settings) {
     segments.push(`file-${task.id ?? Date.now()}`);
   }
 
-  // Медиатека: сверху добавляется папка категории (Фильмы/Сериалы/Аниме/…)
-  const folder = cleanSegment(categoryFolder(settings, task.category));
+  // Library root is download_dir; the category folder is added directly.
+  const folder = cleanSegment(
+    categoryFolder(settings, task.category, task.kind, task.rating),
+  );
   if (folder) segments.unshift(folder);
 
   return ensureExtension(segments.join('/'), task.file_type);

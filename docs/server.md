@@ -37,7 +37,12 @@
   сервера браузер не запускается: только в `fetchMangaInfo`/`fetchReaderInfo`.
 - `index.js` — сервис: `resolveManga` (ComX/MangaDex/MangaLib → название, год,
   главы с признаком «уже скачано»), `createDownload` (фильтр уже скачанного,
-  фоновое задание, прогресс по страницам), `listJobs`, `cancelJob`, `shutdown`.
+  фоновое задание, прогресс по страницам), `moveChapters` (перенос томов с
+  переименованием файлов и `.idk-part`), `listJobs`, `cancelJob`, `shutdown`.
+- `../rezka.js` — резолвер Add by link для Rezka: cookie-экспорт, разбор
+  страницы/франшизы/favorites, озвучки, серии, `get_movie`/`get_stream`, выбор
+  качества. Не использует Chromium; работает обычным `fetch` с cookies из
+  настроек.
 
 Структура на диске: `{Название} [{год}]/Volume N/«8» или «8 - Название»/000.webp`.
 Для MangaDex главы не на русском получают суффикс `[en]` (чтобы ru/en не
@@ -56,7 +61,7 @@
   `-p8081`, `--port=8081`), `-h/--help`, `-v/--version`. Неизвестный аргумент —
   понятная ошибка, а не падение.
 - Переменные окружения (нужны для systemd/NixOS): `PORT`, `HOST`, `DB_FILE`,
-  `DOWNLOAD_DIR`, `LIBRARY_DIR` (начальное значение медиатеки), `MANGO_DIR`
+  `DOWNLOAD_DIR`, `MANGO_DIR`
   (начальное значение папки манги), `CHROMIUM_PATH` (браузер только для
   com-x.life), `AUTH_TOKEN`, `FFMPEG_PATH`, `USER_AGENT`.
 - `usage()` — текст `--help`. Он держится в одном месте с текущими дефолтами.
@@ -125,7 +130,7 @@
   («American Psycho.rus») распознаётся как код языка, а не расширение.
 - `buildFilename` — раскрывает шаблон плейсхолдерами (полный список — в разделе
   «Настройки»). `%sxxexx%` даёт ` S1E2` **без ведущих нулей** — так Jellyfin
-  тоже умеет, а имена короче. Сверху добавляется папка категории медиатеки.
+  тоже умеет, а имена короче. Сверху добавляется папка категории в `download_dir`.
 - `pickBestTitle` — «лучшее название». Оригинальное название бывает строкой из
   вариантов: `Gekijouban… / Beyond the Boundary…`. Скоринг: ASCII-вариант —
   +1, каждое английское слово из словаря — ещё +2; при равном счёте берётся
@@ -167,9 +172,8 @@
   равным `max_concurrent` (настройка, жёсткий потолок 16). Уменьшили лимит —
   лишние воркеры выходят после текущей задачи. Воркер живёт в цикле: взять
   задачу (`claimNextTask`) или спать 500 мс.
-- `saveDir()` — куда пишем: медиатека (`library_dir`), если настроена, иначе
-  папка загрузок. Используется и API (для честного свободного места), и
-  воркерами.
+- `saveDir()` — куда пишем: всегда `download_dir`; папка категории добавляется
+  сверху. Используется и API (для честного свободного места), и воркерами.
 - `downloadHttp` — обычный файл: докачка через Range, перебор зеркал
   (`alt_urls`), после неудачи URL размер перечитывается с диска.
 - `httpGet` — GET **на core-модулях** `node:http`/`node:https` (не `fetch`!):
@@ -305,6 +309,14 @@ CREATE TABLE mango_series (                -- стабильная папка т
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX idx_mango_series_folder ON mango_series(folder);
+
+CREATE TABLE mango_chapter_overrides (     -- ручной перенос глав между томами
+  series_key TEXT NOT NULL,
+  chapter_id TEXT NOT NULL,
+  volume TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (series_key, chapter_id)
+);
 ```
 
 Времена — `Date.now()` (мс). Многих «полей фильма» нет, потому что сервер их не
@@ -314,9 +326,11 @@ CREATE INDEX idx_mango_series_folder ON mango_series(folder);
 
 | Ключ | Дефолт | Что делает |
 |---|---|---|
-| `download_dir` | `server/downloads` | Папка загрузок (если медиатека не задана) |
-| `library_dir` | пусто | Папка медиатеки. Задана → файлы пишутся сразу туда, минуя загрузки |
-| `library_categories` | `films = Фильмы`… | Построчно: `раздел = папка`. `default` — для остальных разделов |
+| `download_dir` | `server/downloads` | Корень библиотеки: файлы и папки категорий пишутся сразу сюда |
+| `library_rules` | JSON-массив | Правила `{section,kind,rating,folder}`; 16+/18+ точнее общего правила |
+| `library_categories` | старый `films = …` | Оставлен для миграции; UI его больше не показывает |
+| `filename_template_mango` | `%orig_title%%year_part%/Volume %volume%/%chapter%%chapter_title_part%` | Шаблон имён манги |
+| `rezka_cookies` | пусто | Netscape-экспорт для Add by link / favorites |
 | `mango_dir` | пусто | Папка манги; пусто — подпапка `mango` в папке загрузок |
 | `chromium_path` | пусто | Путь к Chromium только для com-x.life (DleGuard); MangaDex/MangaLib не используют браузер |
 | `max_concurrent` | `2` | Параллельных загрузок (1–16) |
@@ -354,6 +368,8 @@ CREATE INDEX idx_mango_series_folder ON mango_series(folder);
 | `POST /api/tasks/resume-all` | Снять всё с паузы |
 | `POST /api/tasks/clear-finished` | **Удалить** записи из истории. Тело (необязательно): `{"statuses": ["done","error","canceled","paused"]}` |
 | `POST /api/tasks/hide-finished` | Скрыть завершённые из списка очереди, оставив в истории |
+| `POST /api/tasks/preview` | `{url}` — разобрать Rezka/файл в карточки Add by link |
+| `POST /api/tasks/rezka` | `{items:[{url, quality, voiceover, episodes, force}]}` — получить потоки и поставить задачи |
 | `POST /api/tasks/retry-failed` | Все `error` → `queued` (сброс попыток) |
 | `GET /api/movies/:movieId` | Сводка по фильму: счётчики по статусам + сколько файлов лежит на диске |
 | `POST /api/movies/:movieId/cancel` | Отменить незаконченные задачи фильма. Ответ: `{canceled, movie}` — свежая сводка, чтобы попап сразу перерисовался |
@@ -364,6 +380,7 @@ CREATE INDEX idx_mango_series_folder ON mango_series(folder);
 | `GET /api/mango/jobs` | Задания манги с прогрессом: `current {label, pagesDone, pagesTotal}`, `done/total`, `failed[]`; `stats.chapters` — сколько глав в истории |
 | `GET /api/mango/jobs/:id` | Полное задание с главами и их статусами (интерфейс догружает для завершённых карточек один раз) |
 | `POST /api/mango/series/:key/pause` \| `/resume` | Пауза/продолжение всех живых заданий тайтла; текущая страница дописывается, дальше задание ждёт |
+| `POST /api/mango/series/:key/chapters/move` | `{chapterIds, targetVolume}` — перенести главы с каскадом, переименовать папки/`.idk-part`, обновить `mango_chapters` и overrides. Требует паузы, если задание живо |
 | `POST /api/mango/series/:key/cancel` | Отменить все живые задания тайтла (недокачанная глава `.idk-part` удаляется) |
 | `POST /api/mango/series/:key/delete` | Удалить скачанное: останавливает задания, убирает папки `Volume N` и историю глав; `Cover.png` и файлы юзера в папке тайтла не трогает |
 | `POST /api/mango/series/:key/volume/:volume/delete` | Удалить один том: папку `Volume N` и его записи в истории (пока задание живо — ошибка) |
@@ -387,7 +404,7 @@ curl -H 'X-Auth-Token: секрет' http://192.168.1.50:8080/api/state
 
 # сдвинуть настройки
 curl -X PATCH http://192.168.1.50:8080/api/settings -H 'Content-Type: application/json' \
-  -d '{"max_concurrent":4,"library_dir":"/mnt/media/Jellyfin"}'
+  -d '{"max_concurrent":4,"library_rules":[{"section":"films","kind":"film","rating":"any","folder":"Фильмы"}]}'
 ```
 
 Поля задачи, которые понимает `POST /api/tasks` (все необязательные, кроме
@@ -450,5 +467,5 @@ cd server && npm test        # node --test, без зависимостей
   ссылка» — перешлите задачу со страницы заново из расширения.
 - **`.m3u8` не качается** → поставьте ffmpeg.
 - **«свободно N ГБ», а на диске иначе** → место считается по `saveDir`
-  (медиатека, если настроена). Проверить: `GET /api/state → server.saveDir`.
+  (`download_dir` — единственный корень). Проверить: `GET /api/state → server.saveDir`.
 - **Порт занят** → сервер сам подскажет: `PORT=8081 node src/index.js`.

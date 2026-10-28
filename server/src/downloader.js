@@ -66,8 +66,8 @@ async function worker() {
 
 /** Куда класть файл: медиатека (если настроена) или папка загрузок. */
 export function saveDir(settings = db.getSettings()) {
-  const library = String(settings.library_dir ?? '').trim();
-  return library || settings.download_dir;
+  // Library folder removed: download_dir is the only root.
+  return settings.download_dir;
 }
 
 function taskBaseDir(settings) {

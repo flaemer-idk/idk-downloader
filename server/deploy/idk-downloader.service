@@ -38,7 +38,9 @@ ProtectSystem=strict
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# AF_NETLINK нужен libuv (os.networkInterfaces()), без него Node падает
+# с errno 97 на uv_interface_addresses
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 CapabilityBoundingSet=
 ReadWritePaths=/var/lib/idk-downloader
 

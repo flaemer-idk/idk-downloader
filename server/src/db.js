@@ -4,6 +4,19 @@ import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.js';
 import { UNFINISHED_STATUSES } from './estimate.js';
 
+const DEFAULT_LIBRARY_RULES = [
+  { section: 'animation', kind: 'film', rating: 'any', folder: 'морковные фильмы' },
+  { section: 'animation', kind: 'series', rating: 'any', folder: 'морковные несколькосерий' },
+  { section: 'films', kind: 'film', rating: 'any', folder: 'арбузные фильмы' },
+  { section: 'series', kind: 'series', rating: 'any', folder: 'арбузные несколькосерий' },
+  { section: 'cartoons', kind: 'film', rating: 'any', folder: 'банановые фильмы' },
+  { section: 'cartoons', kind: 'series', rating: 'any', folder: 'банановые несколькосерий' },
+  { section: 'cartoons', kind: 'film', rating: '16+', folder: 'томатные фильмы' },
+  { section: 'cartoons', kind: 'film', rating: '18+', folder: 'томатные фильмы' },
+  { section: 'cartoons', kind: 'series', rating: '16+', folder: 'томатные несколькосерий' },
+  { section: 'cartoons', kind: 'series', rating: '18+', folder: 'томатные несколькосерий' },
+];
+
 const DEFAULT_SETTINGS = {
   download_dir: config.defaultDownloadDir,
   max_concurrent: '2',
@@ -11,21 +24,21 @@ const DEFAULT_SETTINGS = {
   retry_delay_ms: '15000',
   // 1 — заменять готовый файл при повторной загрузке (без « (1)»)
   overwrite_existing: '1',
-  // Медиатека: пусто — качать в папку загрузок; иначе абсолютный путь
-  // (начальное значение можно задать переменной LIBRARY_DIR)
-  library_dir: config.defaultLibraryDir,
-  // Манга: пусто — подпапка mango в папке загрузок (начальное значение — MANGO_DIR)
+  // Legacy column; download_dir is the library root now.
+  library_dir: '',
+  // MangaLib / ComX / MangaDex subfolder (MANGO_DIR overrides)
   mango_dir: config.defaultMangoDir,
-  // Chromium для манга-источников; пусто — искать по типовым путям/PATH (CHROMIUM_PATH)
+  // Chromium for Manga sources (CHROMIUM_PATH overrides)
   chromium_path: config.chromiumPath,
-  // Разделы сайта → папки медиатеки (редактируется в веб-морде)
+  // Legacy mapping kept for migration; the UI uses library_rules.
   library_categories: [
-    'films = Фильмы',
-    'series = Сериалы',
-    'animation = Аниме',
-    'cartoons = Мультики',
+    'films = арбузные фильмы',
+    'series = арбузные несколькосерий',
+    'animation = морковные фильмы',
+    'cartoons = банановые фильмы',
     'documentary = Документальные',
   ].join('\n'),
+  library_rules: JSON.stringify(DEFAULT_LIBRARY_RULES),
   // Год — только на папке; серии — в подпапке «Season N»; имя субтитра
   // совпадает с именем видео, а язык — кодом в суффиксе (American Psycho.rus.vtt),
   // как это ждёт Jellyfin.
@@ -33,6 +46,10 @@ const DEFAULT_SETTINGS = {
   filename_template_series: '%orig_title%%year_part%/%season_folder%/%orig_title%%sxxexx%',
   filename_template_subtitle:
     '%orig_title%%year_part%/%season_folder%/%orig_title%%sxxexx%.%subtitle_lang%',
+  filename_template_mango:
+    '%orig_title%%year_part%/Volume %volume%/%chapter%%chapter_title_part%',
+  // Rezka Netscape cookie export; parsed by server/src/rezka.js.
+  rezka_cookies: '',
 };
 
 /** Старые значения по умолчанию — заменяются на новые автоматически. */
@@ -149,7 +166,15 @@ function initDb(db) {
 
     -- Стабильная папка тайтла: переименование на сайте не создаёт вторую
     -- папку, а коллизии имён между источниками решаются один раз.
-    CREATE TABLE IF NOT EXISTS mango_series (
+    CREATE TABLE IF NOT EXISTS mango_chapter_overrides (
+    series_key TEXT NOT NULL,
+    chapter_id TEXT NOT NULL,
+    volume TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (series_key, chapter_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS mango_series (
       series_key TEXT PRIMARY KEY,
       source     TEXT NOT NULL,
       url        TEXT NOT NULL,
@@ -585,6 +610,40 @@ export function addMangoChapter(entry) {
 }
 
 /** Скачанные главы тайтла (для подсчёта и предупреждений). */
+export function listMangoOverrides(seriesKey) {
+  const rows = q('SELECT chapter_id, volume FROM mango_chapter_overrides WHERE series_key = ?').all(
+    String(seriesKey),
+  );
+  const map = new Map();
+  for (const row of rows) map.set(String(row.chapter_id), String(row.volume));
+  return map;
+}
+
+export function setMangoOverride(seriesKey, chapterId, volume) {
+  q(
+    `INSERT INTO mango_chapter_overrides(series_key, chapter_id, volume, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(series_key, chapter_id) DO UPDATE SET
+       volume = excluded.volume, updated_at = excluded.updated_at`,
+  ).run(String(seriesKey), String(chapterId), String(volume), Date.now());
+}
+
+export function updateMangoChapterVolume(seriesKey, chapterId, volume) {
+  return q(
+    'UPDATE mango_chapters SET volume = ? WHERE series_key = ? AND chapter_id = ?',
+  ).run(String(volume), String(seriesKey), String(chapterId)).changes;
+}
+
+export function deleteMangoOverrides(seriesKey) {
+  return q('DELETE FROM mango_chapter_overrides WHERE series_key = ?').run(String(seriesKey)).changes;
+}
+
+export function deleteMangoVolumeOverrides(seriesKey, volume) {
+  return q(
+    'DELETE FROM mango_chapter_overrides WHERE series_key = ? AND volume = ?',
+  ).run(String(seriesKey), String(volume)).changes;
+}
+
 export function listMangoChapters(seriesKey) {
   return q('SELECT * FROM mango_chapters WHERE series_key = ? ORDER BY id').all(String(seriesKey));
 }

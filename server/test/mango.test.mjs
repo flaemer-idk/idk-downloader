@@ -5,6 +5,7 @@ import {
   parseChapterString,
   chapterFolderName,
   seriesFolderName,
+  mangoTemplateParts,
   uniqueFolderName,
   pageFileName,
 } from '../src/mango/naming.js';
@@ -46,6 +47,27 @@ test('seriesFolderName: [год] и без года', () => {
   assert.equal(seriesFolderName('Суи и Нери с закатной планеты', '2020'),
     'Суи и Нери с закатной планеты [2020]');
   assert.equal(seriesFolderName('Оншот', null), 'Оншот');
+});
+
+test('mangoTemplateParts: тайтл, том, глава и языковой суффикс', () => {
+  assert.deepEqual(
+    mangoTemplateParts('%orig_title%%year_part%/Volume %volume%/%chapter%%chapter_title_part%', {
+      title: 'Суи и Нери с закатной планеты',
+      year: '2020',
+      volume: '6',
+      number: '61',
+      chapterTitle: 'Нери',
+    }),
+    ['Суи и Нери с закатной планеты [2020]', 'Volume 6', '61 - Нери'],
+  );
+  assert.deepEqual(
+    mangoTemplateParts('%orig_title% [%year_part%]/%chapter%', {
+      title: 'Оншот',
+      year: '',
+      number: '1',
+    }),
+    ['Оншот', '1'],
+  );
 });
 
 test('sanitizeName: запрещённые символы, хвостовые точки, длина', () => {

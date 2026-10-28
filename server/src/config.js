@@ -56,8 +56,6 @@ export const config = {
 
   dbFile: process.env.DB_FILE || path.join(rootDir, 'data', 'grabber.db'),
   defaultDownloadDir: process.env.DOWNLOAD_DIR || path.join(rootDir, 'downloads'),
-  /** Начальное значение папки медиатеки (нужно для NixOS-модуля); дальше — веб-морда. */
-  defaultLibraryDir: process.env.LIBRARY_DIR || '',
   /** Начальное значение папки манги (пусто — подпапка mango в папке загрузок). */
   defaultMangoDir: process.env.MANGO_DIR || '',
   publicDir: path.join(rootDir, 'public'),
@@ -85,11 +83,11 @@ export function usage() {
   -v, --version       показать версию и выйти
   -p, --port <номер>  порт сервера (по умолчанию 8080, переменная PORT)
 
-Всё остальное настраивается в веб-морде: папка загрузок и медиатеки,
-шаблоны имён, категории, лимиты загрузок, токен доступа.
+Всё остальное настраивается в веб-морде: папка загрузок, шаблоны имён,
+категории, лимиты загрузок, токен доступа.
 Переменные окружения (для systemd/NixOS): PORT, HOST, DB_FILE, DOWNLOAD_DIR,
-LIBRARY_DIR (начальное значение папки медиатеки), MANGO_DIR (начальное значение
-папки манги), AUTH_TOKEN, FFMPEG_PATH, CHROMIUM_PATH, USER_AGENT.
+MANGO_DIR (начальное значение папки манги), AUTH_TOKEN, FFMPEG_PATH,
+CHROMIUM_PATH, USER_AGENT.
 
 Примеры:
   node src/index.js --port 8081

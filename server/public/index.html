@@ -38,8 +38,6 @@
     </nav>
 
     <div class="sidebar-bottom">
-      <div class="lang-switch" id="lang-switch" role="group" aria-label="Interface language" data-i18n-aria="lang.aria"></div>
-
       <div class="server-widget">
         <div class="sw-head">
           <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
@@ -129,20 +127,7 @@
             <div class="history-count" id="history-count">0 of 0</div>
           </div>
 
-          <div class="table-card">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th data-i18n="history.colFile">File</th>
-                  <th class="th-status" data-i18n="history.colStatus">Status</th>
-                  <th class="th-size" data-i18n="history.colSize">Size</th>
-                  <th class="th-date" data-i18n="history.colDate">Completed</th>
-                  <th class="th-act" data-i18n="history.colAct">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="history-tbody"></tbody>
-            </table>
-          </div>
+          <div class="mg-queue-list" id="history-cards"></div>
         </div>
 
         <div id="history-mango" hidden>
@@ -199,13 +184,14 @@
               <button class="mg-chip" type="button" id="mango-select-all" data-i18n="mango.all">All</button>
               <button class="mg-chip" type="button" id="mango-select-new" data-i18n="mango.selectNew">New only</button>
               <button class="mg-chip" type="button" id="mango-select-none" data-i18n="mango.none">None</button>
+              <button class="mg-chip mg-chip-edit" type="button" data-edit-volumes="series" data-i18n="mango.editVolumes">Edit volumes</button>
             </div>
 
             <div class="mg-volumes-wrap">
               <button class="mg-files-toggle" type="button" id="mango-vol-toggle" aria-expanded="true">
                 <span id="mango-vol-title">Volumes</span>
               </button>
-              <div class="mg-vol-scroll" id="mango-chapters"></div>
+              <div class="mg-vol-scroll" id="mango-chapters" data-scroll-key="mango:chapters"></div>
             </div>
 
             <div class="mg-card-foot">
@@ -283,18 +269,18 @@
           </div>
 
           <div class="set-section">
-            <h3 class="set-title" data-i18n="set.library">Media library</h3>
+            <h3 class="set-title" data-i18n="set.library">Library categories</h3>
             <div class="set-grid">
-              <label class="field span2">
-                <span class="field-label" data-i18n="set.libDir">Library folder</span>
-                <input class="input mono" type="text" id="set-library" placeholder="/mnt/media">
-                <span class="field-hint" data-i18n="set.libHint">Empty — download into the downloads folder; otherwise files are sorted into the library by categories.</span>
-              </label>
-              <label class="field span2">
-                <span class="field-label" data-i18n="set.cats">Categories → library folders</span>
-                <textarea class="input mono" id="set-categories" rows="5" spellcheck="false"></textarea>
-                <span class="field-hint" data-i18n-html="set.catsHint">One line per category: <code>section = folder</code>, e.g. <code>films = Movies</code>. The key <code>default</code> catches everything not listed.</span>
-              </label>
+              <div class="field span2 pg-cat-field">
+                <div class="field-label" data-i18n="set.cats">Categories → library folders</div>
+                <div class="field-hint" data-pg-en="These rules point directly at library folders. A 16+/18+ rule wins over a general one; the legacy raw mapping is gone." data-pg-ru="Эти правила сразу задают папку в медиатеке. Более точное правило (16+/18+) выигрывает у общего; raw-маппинг убран.">These rules point directly at library folders. A 16+/18+ rule wins over a general one; the legacy raw mapping is gone.</div>
+                <div id="pg-cat-rules" class="pg-cat-rules"></div>
+                <div class="pg-cat-actions">
+                  <button class="pg-btn" type="button" id="pg-cat-add" data-pg-en="+ rule" data-pg-ru="+ правило">+ rule</button>
+                  <span class="pg-cat-status" id="pg-cat-status"></span>
+                </div>
+                <div class="pg-cat-preview" id="pg-cat-preview"></div>
+              </div>
             </div>
           </div>
 
@@ -310,6 +296,18 @@
                 <span class="field-label" data-i18n="set.chromium">Chromium path</span>
                 <input class="input mono" type="text" id="set-chromium" placeholder="/run/current-system/sw/bin/chromium">
                 <span class="field-hint" data-i18n="set.chromiumHint">Empty — auto-detect. Used only for com-x.life pages (DleGuard); MangaDex and MangaLib go through their APIs.</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="set-section">
+            <h3 class="set-title" data-pg-en="Rezka cookies" data-pg-ru="Куки Rezka">Rezka cookies</h3>
+            <div class="set-grid">
+              <label class="field span2">
+                <span class="field-label" data-pg-en="Netscape / “Get cookies.txt” export" data-pg-ru="Netscape / экспорт «Get cookies.txt»">Netscape / “Get cookies.txt” export</span>
+                <textarea class="input mono pg-cookie-box" id="pg-cookies" rows="6" spellcheck="false" placeholder="# Netscape HTTP Cookie File&#10;.rezka.fi	TRUE	/	FALSE	0	PHPSESSID	..."></textarea>
+                <span class="field-hint" data-pg-en="Paste the extension export — the server parses the lines into a Cookie header. Cookies are stored in the server settings; never commit them to the repo." data-pg-ru="Вставь текст из расширения — сервер сам разберёт строки в Cookie. Куки хранятся в настройках сервера; не коммить их в репозиторий.">Paste the extension export — the server parses the lines into a Cookie header. Cookies are stored in the server settings; never commit them to the repo.</span>
+                <span class="pg-cookie-status" id="pg-cookie-status">0 cookies</span>
               </label>
             </div>
           </div>
@@ -331,6 +329,12 @@
                 <span class="field-label" data-i18n="set.tplSubs">Name template: subtitles</span>
                 <input class="input mono" type="text" id="set-tpl-subs">
                 <div class="tpl-preview" id="prev-subs"></div>
+              </label>
+              <label class="field span2">
+                <span class="field-label" data-i18n="set.tplMango">Name template: manga</span>
+                <input class="input mono" type="text" id="set-tpl-mango">
+                <div class="tpl-preview" id="prev-mango"></div>
+                <span class="field-hint" data-i18n="set.tplMangoHint">Placeholders: %orig_title%, %year_part%, %volume%, %chapter%, %chapter_title_part%. Pages stay 000.ext.</span>
               </label>
               <div class="hint span2">
                 <div class="hint-title" data-i18n="set.phTitle">Template placeholders</div>
@@ -361,36 +365,32 @@
 
 <!-- ======================= MODAL ======================= -->
 <div class="modal-overlay" id="modal-overlay" hidden>
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal pg-add-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal-head">
       <h2 class="modal-title" id="modal-title" data-i18n="modal.title">Add by link</h2>
       <button class="icon-btn" type="button" id="modal-close" aria-label="Close" data-i18n-aria="modal.close">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <form id="add-form" class="modal-body" novalidate>
+    <form id="add-form" class="modal-body pg-add-body" novalidate>
       <label class="field">
-        <span class="field-label"><span data-i18n="modal.url">Direct link (mp4 / m3u8 / vtt)</span> <span class="req">*</span></span>
-        <input class="input mono" type="url" id="f-url" placeholder="https://cdn.example/video/12345.mp4" required>
-        <span class="field-error" id="f-url-error" data-i18n="modal.urlErr">Enter a direct link to a file.</span>
-        <span class="field-hint" data-i18n="modal.urlHint">Normally the browser extension sends tasks here by itself — use this form only when you already have a direct file link.</span>
+        <span class="field-label"><span data-i18n="modal.url">Link — file, title, franchise or favorites</span> <span class="req">*</span></span>
+        <input class="input mono" type="url" id="f-url" placeholder="https://rezka.fi/franchises/… или https://rezka.fi/favorites/…" required>
+        <span class="field-error" id="f-url-error" data-i18n="modal.urlErr">Enter a link.</span>
+        <span class="field-hint" data-i18n="modal.urlHint">The resolver splits a franchise/favorites page into cards. No referer field: the source host comes from the link itself.</span>
       </label>
-      <label class="field">
-        <span class="field-label" data-i18n="modal.name">File name</span>
-        <input class="input mono" type="text" id="f-name" placeholder="movie (2024).mp4" data-i18n-placeholder="modal.namePh">
-        <span class="field-hint" data-i18n="modal.nameHint">Optional. Empty — taken from the link.</span>
-      </label>
-      <label class="field">
-        <span class="field-label" data-i18n="modal.referer">Referer</span>
-        <input class="input mono" type="text" id="f-referer" placeholder="https://hdrezka.example/">
-        <span class="field-hint" data-i18n="modal.refererHint">Optional. Sent with requests to the CDN.</span>
-      </label>
+      <div class="pg-parse-row">
+        <button class="btn" type="button" id="pg-parse" data-pg-en="Parse link" data-pg-ru="Разобрать ссылку">Parse link</button>
+        <span class="pg-parse-status" id="pg-parse-status"></span>
+      </div>
+      <div class="pg-parse-results" id="pg-parse-results" hidden></div>
+      <div class="pg-modal-note" data-pg-en="Subtitles download automatically when available. The “Download again” checkbox re-downloads existing files; without it only new episodes/files are fetched." data-pg-ru="Субтитры качаются автоматически, если они есть. Галочка «Скачать заново» на карточке означает перекачать уже скачанное; без неё — только новое.">Subtitles download automatically when available. The “Download again” checkbox re-downloads existing files; without it only new episodes/files are fetched.</div>
     </form>
     <div class="modal-foot">
       <button class="btn" type="button" id="modal-cancel" data-i18n="modal.cancel">Cancel</button>
-      <button class="btn btn-primary" type="submit" form="add-form">
+      <button class="btn btn-primary" type="button" id="pg-add-batch" disabled>
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span data-i18n="modal.add">Add to queue</span>
+        <span data-i18n="modal.add">Add selected</span>
       </button>
     </div>
   </div>
@@ -399,5 +399,6 @@
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
 <script src="app.js"></script>
+<script src="ui-extras.js"></script>
 </body>
 </html>
