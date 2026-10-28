@@ -5,6 +5,7 @@ server/node_modules/
 data/
 downloads/
 node_modules/
+server/mango-chromium-profile
 
 # База данных, недокачанные файлы, логи
 *.db
