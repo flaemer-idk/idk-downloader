@@ -27,6 +27,10 @@
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
         <span class="nav-label" data-i18n="nav.history">History</span>
       </a>
+      <a class="nav-item" href="#/mango" data-nav="mango">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="nav-label" data-i18n="nav.mango">Mango</span>
+      </a>
       <a class="nav-item" href="#/settings" data-nav="settings">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l-.06.06a2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span class="nav-label" data-i18n="nav.settings">Settings</span>
@@ -105,33 +109,123 @@
 
       <!-- ============ HISTORY VIEW ============ -->
       <section class="view" id="view-history">
-        <div class="table-toolbar">
-          <div class="search">
-            <svg class="ico search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
-            <input class="input search-input" type="search" id="history-search" placeholder="Search by file name…" autocomplete="off" data-i18n-placeholder="history.searchPh">
-          </div>
-          <div class="seg" id="history-filter" role="tablist" aria-label="Filter by status" data-i18n-aria="history.filterAria">
-            <button type="button" class="seg-btn active" data-filter="all" data-i18n="history.fAll">All</button>
-            <button type="button" class="seg-btn" data-filter="done" data-i18n="history.fDone">Done</button>
-            <button type="button" class="seg-btn" data-filter="canceled" data-i18n="history.fCanceled">Cancelled</button>
-          </div>
-          <div class="toolbar-spacer"></div>
-          <div class="history-count" id="history-count">0 of 0</div>
+        <div class="seg history-mode" id="history-mode" role="tablist" aria-label="History section" data-i18n-aria="history.modeAria">
+          <button type="button" class="seg-btn active" data-hmode="files" data-i18n="history.modeFiles">Files</button>
+          <button type="button" class="seg-btn" data-hmode="mango" data-i18n="history.modeMango">Mango</button>
         </div>
 
-        <div class="table-card">
-          <table class="table">
-            <thead>
-              <tr>
-                <th data-i18n="history.colFile">File</th>
-                <th class="th-status" data-i18n="history.colStatus">Status</th>
-                <th class="th-size" data-i18n="history.colSize">Size</th>
-                <th class="th-date" data-i18n="history.colDate">Completed</th>
-                <th class="th-act" data-i18n="history.colAct">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="history-tbody"></tbody>
-          </table>
+        <div id="history-files">
+          <div class="table-toolbar">
+            <div class="search">
+              <svg class="ico search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+              <input class="input search-input" type="search" id="history-search" placeholder="Search by file name…" autocomplete="off" data-i18n-placeholder="history.searchPh">
+            </div>
+            <div class="seg" id="history-filter" role="tablist" aria-label="Filter by status" data-i18n-aria="history.filterAria">
+              <button type="button" class="seg-btn active" data-filter="all" data-i18n="history.fAll">All</button>
+              <button type="button" class="seg-btn" data-filter="done" data-i18n="history.fDone">Done</button>
+              <button type="button" class="seg-btn" data-filter="canceled" data-i18n="history.fCanceled">Cancelled</button>
+            </div>
+            <div class="toolbar-spacer"></div>
+            <div class="history-count" id="history-count">0 of 0</div>
+          </div>
+
+          <div class="table-card">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th data-i18n="history.colFile">File</th>
+                  <th class="th-status" data-i18n="history.colStatus">Status</th>
+                  <th class="th-size" data-i18n="history.colSize">Size</th>
+                  <th class="th-date" data-i18n="history.colDate">Completed</th>
+                  <th class="th-act" data-i18n="history.colAct">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="history-mango" hidden>
+          <div class="mg-queue-list" id="mango-history"></div>
+          <div class="mg-empty-state" id="mango-history-empty" hidden>
+            <div class="mg-empty-title" data-i18n="mango.historyEmptyTitle">No manga downloaded yet</div>
+            <div class="mg-empty-text" data-i18n="mango.historyEmptyText">Downloaded chapters will appear here, grouped by title.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MANGO VIEW ============ -->
+      <section class="view" id="view-mango">
+        <div class="kpi-strip mg-kpi-strip">
+          <div class="kpi">
+            <div class="kpi-label"><i class="kpi-dot kd-blue"></i><span data-i18n="kpi.downloading">Downloading</span></div>
+            <div class="kpi-value" id="mg-kpi-down-v">0</div>
+            <div class="kpi-sub" id="mg-kpi-down-s">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label"><i class="kpi-dot kd-gray"></i><span data-i18n="kpi.queued">Queued</span></div>
+            <div class="kpi-value" id="mg-kpi-queued-v">0</div>
+            <div class="kpi-sub" id="mg-kpi-queued-s">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label"><i class="kpi-dot kd-green"></i><span data-i18n="kpi.done">Done</span></div>
+            <div class="kpi-value" id="mg-kpi-done-v">0</div>
+            <div class="kpi-sub" id="mg-kpi-done-s">—</div>
+          </div>
+        </div>
+
+        <form class="mg-src-row" id="mango-form" autocomplete="off">
+          <span class="mg-src-label" data-i18n="mango.source">Source</span>
+          <input class="input mono mg-src-input" type="url" id="mango-url" placeholder="MangaDex / MangaLib / com-x.life — ссылка на тайтл" required>
+          <button class="btn btn-primary" type="submit" id="mango-resolve" data-i18n="mango.add">Add</button>
+        </form>
+
+        <div class="mg-queue">
+          <article class="mg-card mg-group" id="mango-series" hidden>
+            <div class="mg-group-head">
+              <div class="mg-group-id">
+                <div class="mg-group-title">
+                  <span class="mg-group-name" id="mango-series-title">—</span>
+                </div>
+                <div class="mg-group-meta" id="mango-series-meta">—</div>
+              </div>
+            </div>
+
+            <div class="mg-langs" id="mango-langs" hidden></div>
+
+            <div class="mg-toolbar">
+              <span class="mg-sel-count" id="mango-sel-count">—</span>
+              <span class="mg-toolbar-spacer"></span>
+              <button class="mg-chip" type="button" id="mango-select-all" data-i18n="mango.all">All</button>
+              <button class="mg-chip" type="button" id="mango-select-new" data-i18n="mango.selectNew">New only</button>
+              <button class="mg-chip" type="button" id="mango-select-none" data-i18n="mango.none">None</button>
+            </div>
+
+            <div class="mg-volumes-wrap">
+              <button class="mg-files-toggle" type="button" id="mango-vol-toggle" aria-expanded="true">
+                <span id="mango-vol-title">Volumes</span>
+              </button>
+              <div class="mg-vol-scroll" id="mango-chapters"></div>
+            </div>
+
+            <div class="mg-card-foot">
+              <div class="mg-foot-left">
+                <div class="mg-foot-count" id="mango-sel-count-foot">—</div>
+                <div class="mg-foot-hint" data-i18n="mango.footHint">Cover.png in the title folder is yours to add; already downloaded chapters are skipped.</div>
+              </div>
+              <div class="mg-foot-actions">
+                <button class="btn btn-danger" type="button" id="mango-discard" data-i18n="mango.discard">Discard</button>
+                <button class="btn btn-primary" type="button" id="mango-download">—</button>
+              </div>
+            </div>
+          </article>
+
+          <div class="mg-queue-list" id="mango-jobs"></div>
+
+          <div class="mg-empty-state" id="mango-empty">
+            <div class="mg-empty-title" data-i18n="mango.emptyTitle">No manga downloads yet</div>
+            <div class="mg-empty-text" data-i18n="mango.emptyText">Paste a title link above and press Add.</div>
+          </div>
         </div>
       </section>
 
@@ -200,6 +294,22 @@
                 <span class="field-label" data-i18n="set.cats">Categories → library folders</span>
                 <textarea class="input mono" id="set-categories" rows="5" spellcheck="false"></textarea>
                 <span class="field-hint" data-i18n-html="set.catsHint">One line per category: <code>section = folder</code>, e.g. <code>films = Movies</code>. The key <code>default</code> catches everything not listed.</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="set-section">
+            <h3 class="set-title" data-i18n="set.mango">Manga</h3>
+            <div class="set-grid">
+              <label class="field span2">
+                <span class="field-label" data-i18n="set.mangoDir">Manga folder</span>
+                <input class="input mono" type="text" id="set-mango-dir" placeholder="(downloads)/mango">
+                <span class="field-hint" data-i18n="set.mangoHint">Empty — a “mango” subfolder inside the downloads folder.</span>
+              </label>
+              <label class="field span2">
+                <span class="field-label" data-i18n="set.chromium">Chromium path</span>
+                <input class="input mono" type="text" id="set-chromium" placeholder="/run/current-system/sw/bin/chromium">
+                <span class="field-hint" data-i18n="set.chromiumHint">Empty — auto-detect. Used only for com-x.life pages (DleGuard); MangaDex and MangaLib go through their APIs.</span>
               </label>
             </div>
           </div>

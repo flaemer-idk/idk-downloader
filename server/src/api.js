@@ -4,6 +4,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import * as db from './db.js';
 import * as downloader from './downloader.js';
+import * as mango from './mango/index.js';
 import { estimateRemaining } from './estimate.js';
 import { log } from './logger.js';
 import { prepareTask } from './tasks.js';
@@ -105,6 +106,8 @@ async function handleApi(req, res, url) {
         placeholderBytes: space.placeholderBytes,
         spaceEnough: space.enough,
         active: downloader.activeCount(),
+        mangoDir: mango.mangoRoot(settings),
+        mangoActive: mango.activeJobsCount(),
       },
       stats: db.getStats(),
       settings,
@@ -213,6 +216,98 @@ async function handleApi(req, res, url) {
     return send(res, 200, db.movieSummary(decodeURIComponent(movieMatch[1])));
   }
 
+  /* ---------------- манга ---------------- */
+
+  // Разбор ссылки на тайтл: название, год, главы + признак «уже скачано».
+  if (pathname === '/api/mango/resolve' && method === 'POST') {
+    const body = await readJson(req);
+    try {
+      return send(res, 200, await mango.resolveManga(body.url, {
+        language: body.language,
+      }));
+    } catch (error) {
+      return send(res, 400, { error: String(error?.message || error) });
+    }
+  }
+
+  // Ставит пачку глав в фоновую очередь. Если всё выбранное уже скачано —
+  // job: null и UI показывает предупреждение.
+  if (pathname === '/api/mango/download' && method === 'POST') {
+    const body = await readJson(req);
+    try {
+      const result = await mango.createDownload(body.url, body.chapters, {
+        language: body.language,
+      });
+      return send(res, result.job ? 201 : 200, result);
+    } catch (error) {
+      return send(res, 400, { error: String(error?.message || error) });
+    }
+  }
+
+  if (pathname === '/api/mango/jobs' && method === 'GET') {
+    return send(res, 200, {
+      jobs: mango.listJobs(),
+      stats: { chapters: db.countMangoChapters() },
+    });
+  }
+
+  // Полное задание (главы + статусы) — интерфейс догружает один раз для
+  // завершённых карточек, чтобы не таскать их в секундном опросе.
+  const mangoJob = /^\/api\/mango\/jobs\/(\d+)$/.exec(pathname);
+  if (mangoJob && method === 'GET') {
+    const job = mango.getJob(Number(mangoJob[1]));
+    if (!job) return send(res, 404, { error: 'Задание не найдено' });
+    return send(res, 200, { job });
+  }
+
+  if (pathname === '/api/mango/history' && method === 'GET') {
+    const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 1000);
+    return send(res, 200, { chapters: db.listRecentMango(limit) });
+  }
+
+  const mangoCancel = /^\/api\/mango\/jobs\/(\d+)\/cancel$/.exec(pathname);
+  if (mangoCancel && method === 'POST') {
+    return send(res, 200, { canceled: mango.cancelJob(Number(mangoCancel[1])) });
+  }
+
+  // Удаление одного тома (папка Volume N + записи в истории).
+  const mangoVolumeDelete = /^\/api\/mango\/series\/([^/]+)\/volume\/([^/]+)\/delete$/.exec(
+    pathname,
+  );
+  if (mangoVolumeDelete && method === 'POST') {
+    try {
+      return send(
+        res,
+        200,
+        await mango.deleteVolume(
+          decodeURIComponent(mangoVolumeDelete[1]),
+          decodeURIComponent(mangoVolumeDelete[2]),
+        ),
+      );
+    } catch (error) {
+      return send(res, 400, { error: String(error?.message || error) });
+    }
+  }
+
+  // «Отменить это произведение»: все живые задания тайтла (ключ comx:<id>).
+  const mangoSeriesAction = /^\/api\/mango\/series\/([^/]+)\/(cancel|pause|resume|delete)$/.exec(
+    pathname,
+  );
+  if (mangoSeriesAction && method === 'POST') {
+    const seriesKey = decodeURIComponent(mangoSeriesAction[1]);
+    const action = mangoSeriesAction[2];
+    if (action === 'pause') return send(res, 200, { paused: mango.pauseSeries(seriesKey) });
+    if (action === 'resume') return send(res, 200, { resumed: mango.resumeSeries(seriesKey) });
+    if (action === 'delete') {
+      try {
+        return send(res, 200, await mango.deleteSeries(seriesKey));
+      } catch (error) {
+        return send(res, 500, { error: String(error?.message || error) });
+      }
+    }
+    return send(res, 200, { canceled: mango.cancelSeries(seriesKey) });
+  }
+
   // «Отменить этот фильм» из попапа: отменяет его незаконченные задачи, чтобы
   // не искать их в общей очереди. Сводка возвращается сразу — попап по ней
   // перерисовывает своё предупреждение.
@@ -264,6 +359,25 @@ async function handleApi(req, res, url) {
       } else {
         patch.library_dir = '';
       }
+    }
+
+    if (body.mango_dir !== undefined) {
+      const dir = String(body.mango_dir).trim();
+      if (dir) {
+        const resolvedMango = path.resolve(dir);
+        await fsp.mkdir(resolvedMango, { recursive: true });
+        patch.mango_dir = resolvedMango;
+      } else {
+        patch.mango_dir = '';
+      }
+    }
+
+    if (body.chromium_path !== undefined) {
+      const chromium = String(body.chromium_path).trim();
+      if (chromium && !fs.existsSync(chromium)) {
+        return send(res, 400, { error: `Chromium не найден: ${chromium}` });
+      }
+      patch.chromium_path = chromium;
     }
 
     if (body.library_categories !== undefined) {

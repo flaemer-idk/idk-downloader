@@ -1,18 +1,20 @@
 # Упаковка сервера idk downloader для Nix.
-# Зависимостей нет: нужен только Node.js (используется встроенный node:sqlite),
-# поэтому сборка сводится к копированию файлов и обёртке-лаунчеру.
+# Встроенный node:sqlite (Node >= 22.5) + одна npm-зависимость puppeteer-core
+# (клиент к системному Chromium для манга-источников), поэтому сборка через
+# buildNpmPackage; Chromium ставится отдельно и попадает в PATH обёртки.
 {
   lib,
-  stdenv,
+  buildNpmPackage,
   nodejs,
   makeWrapper,
+  chromium ? null,
   ffmpeg ? null,
 }:
 
 let
   packageJson = lib.importJSON ../server/package.json;
 in
-stdenv.mkDerivation (finalAttrs: {
+buildNpmPackage (finalAttrs: {
   pname = "idk-downloader";
   version = packageJson.version;
 
@@ -20,6 +22,7 @@ stdenv.mkDerivation (finalAttrs: {
   # Каталоги перечислены отдельно — иначе фильтр отсекает их вместе с содержимым.
   src = lib.sourceByRegex ../server [
     "^package\\.json$"
+    "^package-lock\\.json$"
     "^README\\.md$"
     "^src$"
     "^src/.*$"
@@ -27,13 +30,16 @@ stdenv.mkDerivation (finalAttrs: {
     "^public/.*$"
   ];
 
+  inherit nodejs;
+  npmDepsHash = "sha256-8ZRfxkTtCQoWw8pwY03+BGxLuxjz4xqU6HChfZ7QkRM=";
+  dontNpmBuild = true;
   nativeBuildInputs = [ makeWrapper ];
 
   installPhase = ''
     runHook preInstall
 
     mkdir -p $out/share/idk-downloader $out/bin
-    cp -r package.json README.md src public $out/share/idk-downloader/
+    cp -r package.json package-lock.json node_modules src public README.md $out/share/idk-downloader/
 
     # Обёртка: запускает node с сервером и задаёт разумные пути по умолчанию,
     # чтобы `nix run` работал без предварительной настройки (в Store писать нельзя).
@@ -41,7 +47,11 @@ stdenv.mkDerivation (finalAttrs: {
       --add-flags "$out/share/idk-downloader/src/index.js" \
       --run 'export DB_FILE="''${DB_FILE:-''${XDG_STATE_HOME:-$HOME/.local/state}/idk-downloader/grabber.db}"' \
       --run 'export DOWNLOAD_DIR="''${DOWNLOAD_DIR:-''${XDG_DOWNLOAD_DIR:-$HOME/Downloads}/idk-downloader}"' \
-      ${lib.optionalString (ffmpeg != null) ''--prefix PATH : ${lib.makeBinPath [ ffmpeg ]}''}
+      --prefix PATH : ${
+        lib.makeBinPath (
+          lib.optional (ffmpeg != null) ffmpeg ++ lib.optional (chromium != null) chromium
+        )
+      }
 
     runHook postInstall
   '';

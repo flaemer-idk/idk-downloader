@@ -109,6 +109,9 @@ var I18N = {
       'history.colSize': 'Size',
       'history.colDate': 'Completed',
       'history.colAct': 'Actions',
+      'history.modeAria': 'History section',
+      'history.modeFiles': 'Files',
+      'history.modeMango': 'Mango',
       'history.count': '{shown} of {total}',
       'history.notFound': 'Nothing found for “{q}”',
       'history.empty': 'No records',
@@ -167,6 +170,54 @@ var I18N = {
       'set.libHint': 'Empty — download into the downloads folder; otherwise files are sorted into the library by categories.',
       'set.cats': 'Categories → library folders',
       'set.catsHint': 'One line per category: <code>section = folder</code>, e.g. <code>films = Movies</code>. The key <code>default</code> catches everything not listed.',
+      'set.mango': 'Manga',
+      'set.mangoDir': 'Manga folder',
+      'set.mangoHint': 'Empty — a “mango” subfolder inside the downloads folder.',
+      'set.chromium': 'Chromium path',
+      'set.chromiumHint': 'Empty — auto-detect. Used only for com-x.life pages (DleGuard); MangaDex and MangaLib go through their APIs.',
+      'nav.mango': 'Mango',
+      'sub.mango': 'Titles from com-x.life, MangaDex and MangaLib',
+      'mango.source': 'Source',
+      'mango.add': 'Add',
+      'mango.launching': 'Opening the page…',
+      'mango.urlHint': 'MangaDex and MangaLib go through their APIs; com-x.life opens in headless Chromium only while parsing. No extension or cookies needed.',
+      'mango.language': 'Language',
+      'mango.external': 'on site',
+      'mango.unavailable': 'unavailable',
+      'mango.discard': 'Discard',
+      'mango.new': 'New',
+      'mango.all': 'All',
+      'mango.selectNew': 'New only',
+      'mango.none': 'None',
+      'mango.chapters': 'Chapters: {n}, already downloaded: {d}',
+      'mango.downloaded': 'already downloaded',
+      'mango.emptyList': 'No chapters for this language',
+      'mango.jobLine': '{done} of {total} chapters · failed {failed}',
+      'mango.folder': 'Folder: {dir}',
+      'mango.selectedCount': 'Selected: {n} {chapters}',
+      'mango.downloadN': 'Download {n} {chapters}',
+      'mango.volumesTitle': 'Volumes · {n} {chapters}',
+      'mango.volumeName': 'Volume {n}',
+      'mango.next': 'next: {label}',
+      'mango.inHistory': 'in history',
+      'mango.cancelSeries': 'Cancel title',
+      'mango.deleteVolume': 'Delete volume',
+      'mango.deleted': 'deleted',
+      'mango.alreadyActive': 'This title is already downloading — wait for it or cancel it first',
+      'mango.historyEmptyTitle': 'No manga downloaded yet',
+      'mango.historyEmptyText': 'Downloaded chapters will appear here, grouped by title.',
+      'mango.footHint': 'Cover.png in the title folder is yours to add; already downloaded chapters are skipped.',
+      'mango.emptyTitle': 'No manga downloads yet',
+      'mango.emptyText': 'Paste a title link above and press Add.',
+      'toast.mangoStarted': 'Manga queued: {n} {chapters}',
+      'toast.mangoAll': 'Everything selected is already downloaded',
+      'toast.mangoEmpty': 'Select at least one chapter',
+      'toast.mangoCanceled': 'Manga download cancelled',
+      'toast.mangoPaused': 'Manga paused',
+      'toast.mangoResumed': 'Manga resumed',
+      'toast.mangoDeleted': 'Deleted volumes: {n}',
+      'toast.mangoVolumeDeleted': 'Volume {n} deleted',
+      'pl.chapters': ['chapter', 'chapters'],
       'set.tpl': 'Name templates',
       'set.tplFilm': 'Name template: movies',
       'set.tplSeries': 'Name template: series',
@@ -271,6 +322,9 @@ var I18N = {
       'history.colSize': 'Размер',
       'history.colDate': 'Завершено',
       'history.colAct': 'Действия',
+      'history.modeAria': 'Раздел истории',
+      'history.modeFiles': 'Файлы',
+      'history.modeMango': 'Манго',
       'history.count': '{shown} из {total}',
       'history.notFound': 'Ничего не найдено по запросу «{q}»',
       'history.empty': 'Записей нет',
@@ -329,6 +383,54 @@ var I18N = {
       'set.libHint': 'Пусто — качать в папку загрузок; иначе файлы раскладываются в медиатеку по категориям.',
       'set.cats': 'Категории → папки медиатеки',
       'set.catsHint': 'Одна строка на категорию: <code>раздел = папка</code>, например <code>films = Фильмы</code>. Ключ <code>default</code> — папка для всего неперечисленного.',
+      'set.mango': 'Манга',
+      'set.mangoDir': 'Папка манги',
+      'set.mangoHint': 'Пусто — подпапка «mango» в папке загрузок.',
+      'set.chromium': 'Путь к Chromium',
+      'set.chromiumHint': 'Пусто — найти автоматически. Нужен только для com-x.life (DleGuard); MangaDex и MangaLib идут через API.',
+      'nav.mango': 'Манго',
+      'sub.mango': 'Тайтлы с com-x.life, MangaDex и MangaLib',
+      'mango.source': 'Источник',
+      'mango.add': 'Добавить',
+      'mango.launching': 'Открываю страницу…',
+      'mango.urlHint': 'MangaDex и MangaLib идут через API; com-x.life открывается в безголовом Chromium только на время разбора. Ни расширения, ни cookies не нужно.',
+      'mango.language': 'Язык',
+      'mango.external': 'на сайте',
+      'mango.unavailable': 'недоступно',
+      'mango.discard': 'Сбросить',
+      'mango.new': 'Новая',
+      'mango.all': 'Все',
+      'mango.selectNew': 'Только новые',
+      'mango.none': 'Снять всё',
+      'mango.chapters': 'Глав: {n}, уже скачано: {d}',
+      'mango.downloaded': 'уже есть',
+      'mango.emptyList': 'На этом языке глав нет',
+      'mango.jobLine': '{done} из {total} глав · провалено {failed}',
+      'mango.folder': 'Папка: {dir}',
+      'mango.selectedCount': 'Выбрано: {n} {chapters}',
+      'mango.downloadN': 'Скачать {n} {chapters}',
+      'mango.volumesTitle': 'Тома · {n} {chapters}',
+      'mango.volumeName': 'Том {n}',
+      'mango.next': 'следующая: {label}',
+      'mango.inHistory': 'в истории',
+      'mango.cancelSeries': 'Отменить произведение',
+      'mango.deleteVolume': 'Удалить том',
+      'mango.deleted': 'удалено',
+      'mango.alreadyActive': 'Это произведение уже качается — дождитесь окончания или отмените задание',
+      'mango.historyEmptyTitle': 'Скачанной манги ещё нет',
+      'mango.historyEmptyText': 'Скачанные главы появятся здесь, сгруппированные по тайтлам.',
+      'mango.footHint': 'Cover.png в папку тайтла кладёте сами; уже скачанные главы пропускаются.',
+      'mango.emptyTitle': 'Загрузок манги ещё не было',
+      'mango.emptyText': 'Вставьте ссылку на тайтл выше и нажмите «Добавить».',
+      'toast.mangoStarted': 'Манга в очереди: {n} {chapters}',
+      'toast.mangoAll': 'Всё выбранное уже скачано',
+      'toast.mangoEmpty': 'Выберите хотя бы одну главу',
+      'toast.mangoCanceled': 'Загрузка манги отменена',
+      'toast.mangoPaused': 'Манга на паузе',
+      'toast.mangoResumed': 'Манга продолжает качаться',
+      'toast.mangoDeleted': 'Удалено томов: {n}',
+      'toast.mangoVolumeDeleted': 'Том {n} удалён',
+      'pl.chapters': ['глава', 'главы', 'глав'],
       'set.tpl': 'Шаблоны имён',
       'set.tplFilm': 'Шаблон имени: фильмы',
       'set.tplSeries': 'Шаблон имени: сериалы',
@@ -518,7 +620,11 @@ var state = {
   historySearch: '',
   settingsDirty: false,
   netError: '',
-  adding: false
+  adding: false,
+  mango: { series: null, selection: {}, jobs: [], details: {}, detailsPending: {}, stats: { chapters: 0 }, collapsed: {}, expanded: {}, loading: false, langBusy: false },
+  historyMode: 'files',
+  mangoHistory: [],
+  mangoHistoryAt: 0
 };
 
 var speedCache = new Map();
@@ -715,6 +821,8 @@ function fillSettingsForm() {
   $('set-overwrite').checked = s.overwrite_existing === '1';
   $('set-library').value = s.library_dir || '';
   $('set-categories').value = s.library_categories || '';
+  $('set-mango-dir').value = s.mango_dir || '';
+  $('set-chromium').value = s.chromium_path || '';
   $('set-tpl-film').value = s.filename_template_film || '';
   $('set-tpl-series').value = s.filename_template_series || '';
   $('set-tpl-subs').value = s.filename_template_subtitle || '';
@@ -731,6 +839,8 @@ async function saveSettings() {
     overwrite_existing: $('set-overwrite').checked,
     library_dir: $('set-library').value.trim(),
     library_categories: $('set-categories').value,
+    mango_dir: $('set-mango-dir').value.trim(),
+    chromium_path: $('set-chromium').value.trim(),
     filename_template_film: $('set-tpl-film').value.trim(),
     filename_template_series: $('set-tpl-series').value.trim(),
     filename_template_subtitle: $('set-tpl-subs').value.trim()
@@ -965,13 +1075,14 @@ function toast(msg, type) {
 function currentRoute() {
   var h = (window.location.hash || '').replace(/^#\/?/, '');
   if (h.indexOf('history') === 0) return 'history';
+  if (h.indexOf('mango') === 0) return 'mango';
   if (h.indexOf('settings') === 0) return 'settings';
   return 'queue';
 }
 
 function applyRoute() {
   var r = currentRoute();
-  ['queue', 'history', 'settings'].forEach(function (v) {
+  ['queue', 'history', 'mango', 'settings'].forEach(function (v) {
     $('view-' + v).classList.toggle('active', v === r);
   });
   document.querySelectorAll('.nav-item').forEach(function (a) {
@@ -985,6 +1096,7 @@ function renderAll() {
   renderTopbar();
   renderQueue();
   renderHistory();
+  renderMango();
   renderKpi();
   renderSidebar();
 }
@@ -1032,9 +1144,650 @@ function renderTopbar() {
   } else if (route === 'history') {
     var recs = state.stats.done + state.stats.canceled;
     sub.textContent = t('sub.history', { n: recs, records: tp('pl.records', recs) });
+  } else if (route === 'mango') {
+    sub.textContent = '';
   } else {
     sub.textContent = t('sub.settings');
   }
+}
+
+/* ---------------- render: mango ---------------- */
+
+function mangoChapterLabel(chapter) {
+  return chapter.title ? chapter.number + ' - ' + chapter.title : String(chapter.number);
+}
+
+function mgVolumeGroups(chapters) {
+  var map = {};
+  chapters.forEach(function (c) {
+    var key = String(c.volume);
+    if (!map[key]) map[key] = [];
+    map[key].push(c);
+  });
+  return Object.keys(map)
+    .sort(function (a, b) { return (parseFloat(a) || 0) - (parseFloat(b) || 0); })
+    .map(function (v) { return { volume: v, chapters: map[v] }; });
+}
+
+function mgApplyIndeterminate(root) {
+  root.querySelectorAll('[data-indeterminate="1"]').forEach(function (el) {
+    el.indeterminate = true;
+  });
+}
+
+function mgChapterPill(chapter) {
+  if (chapter.external) {
+    return '<span class="mg-pill mg-pill-canceled">' + escapeHtml(t('mango.external')) + '</span>';
+  }
+  if (chapter.unavailable) {
+    return '<span class="mg-pill mg-pill-error">' + escapeHtml(t('mango.unavailable')) + '</span>';
+  }
+  if (chapter.pending) {
+    return '<span class="mg-pill mg-pill-queued">' + escapeHtml(t('status.queued')) + '</span>';
+  }
+  if (chapter.downloaded) {
+    return '<span class="mg-pill mg-pill-done">' + escapeHtml(t('mango.downloaded')) + '</span>';
+  }
+  return '<span class="mg-pill mg-pill-new">' + escapeHtml(t('mango.new')) + '</span>';
+}
+
+var MG_JOB_PILL = {
+  running: ['mg-pill-downloading', 'status.downloading'],
+  paused: ['mg-pill-paused', 'status.paused'],
+  done: ['mg-pill-done', 'status.done'],
+  canceled: ['mg-pill-canceled', 'status.canceled'],
+  error: ['mg-pill-error', 'status.error']
+};
+
+var MG_CHAPTER_PILL = {
+  queued: ['mg-pill-queued', 'status.queued'],
+  downloading: ['mg-pill-downloading', 'status.downloading'],
+  done: ['mg-pill-done', 'status.done'],
+  skipped: ['mg-pill-done', 'mango.downloaded'],
+  failed: ['mg-pill-error', 'status.error'],
+  canceled: ['mg-pill-canceled', 'status.canceled'],
+  deleted: ['mg-pill-canceled', 'mango.deleted']
+};
+
+function mgPill(map, key) {
+  var m = map[key] || map.queued || map.running;
+  return '<span class="mg-pill ' + m[0] + '">' + escapeHtml(t(m[1])) + '</span>';
+}
+
+function mgSelectionRow(chapter) {
+  var disabled = chapter.pending || chapter.external || chapter.unavailable;
+  var title = mangoChapterLabel(chapter);
+  if (chapter.group) title += ' · ' + chapter.group;
+  return '<div class="mg-ch-row">' +
+    '<input type="checkbox" data-chapter="' + escapeHtml(chapter.id) + '"' +
+      (state.mango.selection[chapter.id] ? ' checked' : '') +
+      (disabled ? ' disabled' : '') + '>' +
+    '<span class="mg-ch-name" title="' + escapeHtml(title) + '">' +
+      escapeHtml(mangoChapterLabel(chapter)) + '</span>' +
+    '<span class="mg-ch-status">' + mgChapterPill(chapter) + '</span>' +
+    '</div>';
+}
+
+function mgJobRow(chapter) {
+  var progress = '';
+  if (chapter.status === 'downloading' && chapter.pagesTotal) {
+    var pct = Math.round((chapter.pagesDone / chapter.pagesTotal) * 100);
+    progress = '<span class="mg-q-prog">' +
+      '<span class="mg-mini-prog"><span class="mg-mini-fill" style="width:' + pct + '%"></span></span>' +
+      '<span class="mg-mini-pct">' + pct + '%</span>' +
+      '</span>';
+  }
+  return '<div class="mg-ch-row mg-q-row">' +
+    '<span class="mg-ch-name" title="' + escapeHtml(chapter.label) + '">' +
+      escapeHtml(chapter.label) + '</span>' +
+    progress +
+    '<span class="mg-ch-status">' + mgPill(MG_CHAPTER_PILL, chapter.status) + '</span>' +
+    '</div>';
+}
+
+// Сворачиваемые тома; scope разделяет выбор, задания и историю.
+// Тома по умолчанию свёрнуты (expanded[key] === true — раскрыт).
+function mgVolumesHtml(scope, chapters, selectable, rowFn, deleteSeriesKey) {
+  var html = '';
+  mgVolumeGroups(chapters).forEach(function (group) {
+    var key = scope + ':' + group.volume;
+    var collapsed = state.mango.expanded[key] !== true;
+    html += '<div class="mg-vol' + (collapsed ? ' mg-collapsed' : '') + '">';
+    html += '<div class="mg-vol-head" data-vol-toggle="' + escapeHtml(key) + '">' +
+      '<span class="mg-vol-chev" aria-hidden="true"></span>';
+    if (selectable) {
+      var selected = group.chapters.filter(function (c) {
+        return state.mango.selection[c.id];
+      }).length;
+      html += '<input type="checkbox" class="mg-vol-cb" data-vol-check="' + escapeHtml(key) + '"' +
+        (selected === group.chapters.length ? ' checked' : '') +
+        (selected > 0 && selected < group.chapters.length ? ' data-indeterminate="1"' : '') +
+        ' aria-label="' + escapeHtml(t('mango.volumeName', { n: group.volume })) + '">';
+    }
+    html += '<span class="mg-vol-name">' + escapeHtml(t('mango.volumeName', { n: group.volume })) + '</span>';
+    if (selectable || deleteSeriesKey) {
+      html += '<span class="mg-vol-actions">';
+      if (selectable) {
+        html += '<button type="button" class="mg-vol-btn" data-vol-all="' + escapeHtml(key) + '">' +
+          escapeHtml(t('mango.all')) + '</button>' +
+          '<button type="button" class="mg-vol-btn" data-vol-none="' + escapeHtml(key) + '">' +
+          escapeHtml(t('mango.none')) + '</button>';
+      }
+      if (deleteSeriesKey) {
+        var delKey = 'mg-vol-del:' + deleteSeriesKey + ':' + group.volume;
+        var delArmed = isArmed(delKey);
+        html += '<button type="button" class="mg-vol-btn mg-vol-btn-danger' +
+          (delArmed ? ' mg-vol-btn-armed' : '') + '" data-del-vol="' + escapeHtml(group.volume) +
+          '" data-del-series="' + escapeHtml(deleteSeriesKey) + '">' +
+          escapeHtml(delArmed ? t('act.sureDelete') : t('act.delete')) + '</button>';
+      }
+      html += '</span>';
+    }
+    html += '<span class="mg-vol-count">' + group.chapters.length + ' ' +
+        escapeHtml(tp('pl.chapters', group.chapters.length)) + '</span>' +
+      '</div><div class="mg-vol-rows">';
+    group.chapters.forEach(function (chapter) { html += rowFn(chapter); });
+    html += '</div></div>';
+  });
+  return html;
+}
+
+function mgJobHtml(job) {
+  var title = job.year ? job.title + ' [' + job.year + ']' : job.title;
+  var finished = job.done + job.skipped;
+  var pct = job.total ? Math.round((finished / job.total) * 100) : 0;
+  var stateClass = job.status === 'running' || job.status === 'paused'
+    ? 'mg-prog-state-' + job.status
+    : 'mg-prog-state-' + job.status;
+  var armedCancel = isArmed('mg-cancel:' + job.seriesKey);
+  var armedDelete = isArmed('mg-delete:' + job.seriesKey);
+
+  var metaParts = [];
+  if (job.sourceLabel) metaParts.push(job.sourceLabel);
+  if (job.language) metaParts.push(String(job.language).toUpperCase());
+  metaParts.push(t('mango.folder', { dir: job.dir }));
+
+  var actions = '';
+  if (job.status === 'running') {
+    actions += '<button class="mg-act-btn" type="button" data-pause-series="' +
+      escapeHtml(job.seriesKey) + '">' + escapeHtml(t('act.pause')) + '</button>';
+  } else if (job.status === 'paused') {
+    actions += '<button class="mg-act-btn" type="button" data-resume-series="' +
+      escapeHtml(job.seriesKey) + '">' + escapeHtml(t('act.resume')) + '</button>';
+  }
+  if (job.status === 'running' || job.status === 'paused') {
+    actions += '<button class="mg-act-btn mg-act-danger' + (armedCancel ? ' mg-act-armed' : '') +
+      '" type="button" data-cancel-series="' + escapeHtml(job.seriesKey) + '">' +
+      escapeHtml(armedCancel ? t('act.sureCancel') : t('mango.cancelSeries')) + '</button>';
+  }
+  actions += '<button class="mg-act-btn mg-act-danger' + (armedDelete ? ' mg-act-armed' : '') +
+    '" type="button" data-delete-series="' + escapeHtml(job.seriesKey) + '">' +
+    escapeHtml(armedDelete ? t('act.sureDelete') : t('act.delete')) + '</button>';
+
+  var html = '<article class="mg-card mg-group">' +
+    '<div class="mg-group-head">' +
+      '<div class="mg-group-id">' +
+        '<div class="mg-group-title">' +
+          '<span class="mg-group-name">' + escapeHtml(title) + '</span>' +
+          mgPill(MG_JOB_PILL, job.status) +
+        '</div>' +
+        '<div class="mg-group-meta">' + escapeHtml(metaParts.join(' · ')) + '</div>' +
+      '</div>' +
+      '<div class="mg-group-prog ' + stateClass + '">' +
+        '<div class="mg-prog-top">' +
+          '<span class="mg-prog-pct">' + pct + '%</span>' +
+          '<span class="mg-prog-right">' + escapeHtml(t('mango.jobLine', {
+            done: finished, total: job.total, failed: job.failed.length
+          })) + '</span>' +
+        '</div>' +
+        '<div class="mg-prog-bar"><span class="mg-prog-fill" style="width:' + pct + '%"></span></div>' +
+      '</div>' +
+      '<div class="mg-group-actions">' + actions + '</div>' +
+    '</div>';
+
+  var chapters = job.chapters ||
+    (state.mango.details[job.id] && state.mango.details[job.id].chapters) || [];
+  if (chapters.length) {
+    var allKey = 'job' + job.id + ':all';
+    var allCollapsed = !!state.mango.collapsed[allKey];
+    var canDelete = job.status !== 'running' && job.status !== 'paused';
+    html += '<div class="mg-volumes-wrap">' +
+      '<button class="mg-files-toggle' + (allCollapsed ? ' mg-collapsed' : '') +
+        '" type="button" data-job-all="' + escapeHtml(allKey) + '" aria-expanded="' +
+        String(!allCollapsed) + '">' +
+        escapeHtml(t('mango.volumesTitle', {
+          n: chapters.length,
+          chapters: tp('pl.chapters', chapters.length)
+        })) +
+      '</button>' +
+      '<div class="mg-vol-scroll"' + (allCollapsed ? ' hidden' : '') + '>' +
+        mgVolumesHtml('job' + job.id, chapters, false, mgJobRow, canDelete ? job.seriesKey : null) +
+      '</div></div>';
+  }
+  return html + '</article>';
+}
+
+function mgLanguageName(code) {
+  var ui = state.lang === 'ru' ? 'ru' : 'en';
+  try {
+    var names = new Intl.DisplayNames([ui], { type: 'language' });
+    return names.of(String(code)) || String(code);
+  } catch (e) {
+    return String(code);
+  }
+}
+
+// Языковые чипы MangaDex. Набор языков приходит с сервера
+// (availableTranslatedLanguages), поэтому ru/en здесь не зашиты.
+function mgRenderLanguages() {
+  var box = $('mango-langs');
+  if (!box) return;
+  var series = state.mango.series;
+  var langs = (series && Array.isArray(series.languages)) ? series.languages : [];
+  if (!series || series.source !== 'mangadex' || !langs.length) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+
+  box.hidden = false;
+  var html = '<span class="mg-langs-label">' + escapeHtml(t('mango.language')) + '</span>' +
+    '<span class="mg-langs-list">';
+  langs.forEach(function (code) {
+    var active = code === series.language;
+    html += '<button type="button" class="mg-lang-chip' + (active ? ' is-active' : '') + '"' +
+      ' data-lang="' + escapeHtml(code) + '"' +
+      ' title="' + escapeHtml(mgLanguageName(code)) + '"' +
+      ' aria-pressed="' + (active ? 'true' : 'false') + '"' +
+      (state.mango.langBusy ? ' disabled' : '') + '>' +
+      escapeHtml(String(code).toUpperCase()) + '</button>';
+  });
+  html += '</span>';
+  box.innerHTML = html;
+}
+
+function renderMango() {
+  var m = state.mango;
+  var seriesBox = $('mango-series');
+  if (!seriesBox) return;
+
+  var jobs = m.jobs || [];
+  var running = jobs.filter(function (job) { return job.status === 'running'; });
+  var paused = jobs.filter(function (job) { return job.status === 'paused'; });
+
+  // KPI: скачивается / в очереди / готово (из истории).
+  var active = running[0] || paused[0] || null;
+  $('mg-kpi-down-v').textContent = String(running.length);
+  if (active && active.current) {
+    var pagePct = active.current.pagesTotal
+      ? Math.round((active.current.pagesDone / active.current.pagesTotal) * 100)
+      : 0;
+    $('mg-kpi-down-s').textContent = active.title + ' · ' + active.current.label +
+      (active.current.pagesTotal ? ' — ' + pagePct + '%' : '');
+  } else {
+    $('mg-kpi-down-s').textContent = '—';
+  }
+
+  var queued = 0;
+  var nextLabel = '';
+  running.concat(paused).forEach(function (job) {
+    queued += Math.max(0, job.total - job.done - job.skipped - job.failed.length);
+    if (!nextLabel && job.chapters) {
+      var next = job.chapters.filter(function (c) { return c.status === 'queued'; })[0];
+      if (next) nextLabel = next.label;
+    }
+  });
+  $('mg-kpi-queued-v').textContent = String(queued);
+  $('mg-kpi-queued-s').textContent = nextLabel
+    ? t('mango.next', { label: nextLabel })
+    : '—';
+
+  $('mg-kpi-done-v').textContent = String((m.stats && m.stats.chapters) || 0);
+  $('mg-kpi-done-s').textContent = t('mango.inHistory');
+
+  // Карточка выбора.
+  if (m.series) {
+    seriesBox.hidden = false;
+    $('mango-series-title').textContent = m.series.year
+      ? m.series.title + ' [' + m.series.year + ']'
+      : m.series.title;
+    var downloaded = m.series.chapters.filter(function (c) { return c.downloaded; }).length;
+    var metaParts = [];
+    if (m.series.sourceLabel) metaParts.push(m.series.sourceLabel);
+    metaParts.push(t('mango.chapters', {
+      n: m.series.chapters.length,
+      d: downloaded
+    }));
+    $('mango-series-meta').textContent = metaParts.join(' · ');
+    mgRenderLanguages();
+
+    var selected = m.series.chapters.filter(function (c) {
+      return m.selection[c.id];
+    }).length;
+    var countText = t('mango.selectedCount', {
+      n: selected,
+      chapters: tp('pl.chapters', selected)
+    });
+    $('mango-sel-count').textContent = countText;
+    $('mango-sel-count-foot').textContent = countText;
+    $('mango-download').textContent = t('mango.downloadN', {
+      n: selected,
+      chapters: tp('pl.chapters', selected)
+    });
+    $('mango-download').disabled = selected === 0;
+    $('mango-vol-title').textContent = t('mango.volumesTitle', {
+      n: m.series.chapters.length,
+      chapters: tp('pl.chapters', m.series.chapters.length)
+    });
+
+    // Список перерисовываем только когда он реально изменился: иначе
+    // чекбокс пересоздаётся под курсором на каждом секундном опросе.
+    var key = m.series.url + '|' + (m.series.source || '') + '|' + (m.series.language || '') +
+      '|' + m.series.chapters.map(function (c) {
+        return c.id + (c.downloaded ? '1' : '0') + (m.selection[c.id] ? 's' : '') +
+          (c.external ? 'e' : '') + (c.unavailable ? 'u' : '') + (c.pending ? 'p' : '');
+      }).join(',');
+    var list = $('mango-chapters');
+    if (list.dataset.key !== key) {
+      list.dataset.key = key;
+      list.innerHTML = mgVolumesHtml(
+        'sel',
+        m.series.chapters,
+        true,
+        mgSelectionRow,
+        m.series.seriesKey,
+      ) || '<div class="mg-empty">' + escapeHtml(t('mango.emptyList')) + '</div>';
+      mgApplyIndeterminate(list);
+    }
+
+    var collapsedAll = !!m.collapsed['sel:all'];
+    $('mango-vol-toggle').classList.toggle('mg-collapsed', collapsedAll);
+    $('mango-vol-toggle').setAttribute('aria-expanded', String(!collapsedAll));
+    list.hidden = collapsedAll;
+  } else {
+    seriesBox.hidden = true;
+    mgRenderLanguages();
+  }
+
+  // Карточки заданий (по одной на тайтл-задание).
+  $('mango-jobs').innerHTML = jobs.map(mgJobHtml).join('');
+  $('mango-empty').hidden = !!m.series || jobs.length > 0;
+}
+
+/* ---------------- mango: действия ---------------- */
+
+async function refreshMangoJobs() {
+  try {
+    var data = await api('/api/mango/jobs');
+    state.mango.jobs = data.jobs || [];
+    state.mango.stats = data.stats || { chapters: 0 };
+    ensureMangoDetails(state.mango.jobs);
+    renderMango();
+  } catch (e) { /* сетевую ошибку покажет основной опрос */ }
+}
+
+// Завершённые задания не таскают главы в секундном опросе — догружаем
+// полный список один раз и запоминаем, чтобы карточка оставалась раскрытой.
+function ensureMangoDetails(jobs) {
+  jobs.forEach(function (job) {
+    if (job.chapters && job.chapters.length) {
+      state.mango.details[job.id] = { chapters: job.chapters, status: job.status };
+      return;
+    }
+    var cached = state.mango.details[job.id];
+    if (cached && cached.status === job.status) return;
+    if (state.mango.detailsPending[job.id]) return;
+    state.mango.detailsPending[job.id] = true;
+    api('/api/mango/jobs/' + job.id)
+      .then(function (data) {
+        state.mango.details[job.id] = {
+          chapters: (data.job && data.job.chapters) || [],
+          status: job.status
+        };
+        renderMango();
+      })
+      .catch(function () { /* карточка останется без глав */ })
+      .finally(function () {
+        delete state.mango.detailsPending[job.id];
+      });
+  });
+}
+
+async function refreshMangoHistory(force) {
+  var now = Date.now();
+  if (!force && now - state.mangoHistoryAt < 3000) return;
+  state.mangoHistoryAt = now;
+  try {
+    var data = await api('/api/mango/history?limit=1000');
+    state.mangoHistory = data.chapters || [];
+    if (state.historyMode === 'mango') renderMangoHistory();
+  } catch (e) { /* историю обновим при следующем заходе */ }
+}
+
+async function deleteMangoVolume(seriesKey, volume) {
+  try {
+    await api(
+      '/api/mango/series/' + encodeURIComponent(seriesKey) +
+        '/volume/' + encodeURIComponent(volume) + '/delete',
+      { method: 'POST' },
+    );
+    toast(t('toast.mangoVolumeDeleted', { n: volume }), 'success');
+    // После удаления томов меняются статусы глав в завершённых карточках.
+    state.mango.details = {};
+    state.mango.detailsPending = {};
+    await refreshMangoJobs();
+    await refreshMangoHistory(true);
+    if (state.mango.series) await refreshMangoSeries();
+  } catch (err) {
+    toast(t('toast.actionErr', { msg: err.message }), 'error');
+  }
+}
+
+async function refreshMangoSeries() {
+  if (!state.mango.series) return;
+  try {
+    var data = await api('/api/mango/resolve', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: state.mango.series.url,
+        language: state.mango.series.language,
+      }),
+    });
+    if (data.active) {
+      state.mango.series = null;
+      state.mango.selection = {};
+    } else {
+      var keep = {};
+      data.chapters.forEach(function (c) {
+        if (!c.downloaded && !c.pending && !c.external && !c.unavailable &&
+            state.mango.selection[c.id]) keep[c.id] = true;
+      });
+      state.mango.series = data;
+      state.mango.selection = keep;
+    }
+    $('mango-chapters').dataset.key = '';
+    renderMango();
+  } catch (e) { /* тихо: карточка останется прежней */ }
+}
+
+function mangoSelectionIds() {
+  return Object.keys(state.mango.selection).filter(function (id) {
+    return state.mango.selection[id];
+  });
+}
+
+function mgRerenderSelection() {
+  $('mango-chapters').dataset.key = '';
+  renderMango();
+}
+
+function setMangoSelection(predicate) {
+  var series = state.mango.series;
+  if (!series) return;
+  state.mango.selection = {};
+  series.chapters.forEach(function (c) {
+    if (!c.pending && !c.external && !c.unavailable && predicate(c)) {
+      state.mango.selection[c.id] = true;
+    }
+  });
+  mgRerenderSelection();
+}
+
+function clearMangoSelectionCard() {
+  state.mango.series = null;
+  state.mango.selection = {};
+  $('mango-chapters').dataset.key = '';
+  renderMango();
+}
+
+async function onMangoResolve(e) {
+  if (e) e.preventDefault();
+  var url = $('mango-url').value.trim();
+  if (!url) return;
+  var button = $('mango-resolve');
+  button.disabled = true;
+  button.textContent = t('mango.loading');
+  try {
+    var data = await api('/api/mango/resolve', {
+      method: 'POST',
+      body: JSON.stringify({ url: url })
+    });
+    state.mango.series = data;
+    state.mango.selection = {};
+    if (data.active) {
+      // Уже качается: не даём добавить второй раз, карточку не открываем.
+      state.mango.series = null;
+      toast(t('mango.alreadyActive'), 'error');
+      $('mango-url').value = '';
+      $('mango-chapters').dataset.key = '';
+      renderMango();
+      return;
+    }
+    data.chapters.forEach(function (c) {
+      if (!c.downloaded && !c.pending && !c.external && !c.unavailable) {
+        state.mango.selection[c.id] = true;
+      }
+    });
+    $('mango-url').value = '';
+    $('mango-chapters').dataset.key = '';
+    renderMango();
+  } catch (err) {
+    toast(t('toast.actionErr', { msg: err.message }), 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = t('mango.add');
+  }
+}
+
+async function onMangoLanguage(code) {
+  var series = state.mango.series;
+  if (!series || !code || code === series.language || state.mango.langBusy) return;
+  state.mango.langBusy = true;
+  renderMango();
+  try {
+    var data = await api('/api/mango/resolve', {
+      method: 'POST',
+      body: JSON.stringify({ url: series.url, language: code }),
+    });
+    if (data.active) {
+      state.mango.series = null;
+      state.mango.selection = {};
+      toast(t('mango.alreadyActive'), 'error');
+    } else {
+      state.mango.series = data;
+      state.mango.selection = {};
+      data.chapters.forEach(function (c) {
+        if (!c.downloaded && !c.pending && !c.external && !c.unavailable) {
+          state.mango.selection[c.id] = true;
+        }
+      });
+    }
+    $('mango-chapters').dataset.key = '';
+  } catch (err) {
+    toast(t('toast.actionErr', { msg: err.message }), 'error');
+  } finally {
+    state.mango.langBusy = false;
+    renderMango();
+  }
+}
+
+async function onMangoDownload() {
+  var series = state.mango.series;
+  if (!series) return;
+  var ids = mangoSelectionIds();
+  if (!ids.length) {
+    toast(t('toast.mangoEmpty'), 'error');
+    return;
+  }
+  try {
+    var result = await api('/api/mango/download', {
+      method: 'POST',
+      body: JSON.stringify({
+        url: series.url,
+        chapters: ids,
+        language: series.language,
+      })
+    });
+    if (result.job) {
+      toast(t('toast.mangoStarted', {
+        n: result.job.total,
+        chapters: tp('pl.chapters', result.job.total)
+      }), 'success');
+      // Поставили в очередь — карточка выбора больше не нужна.
+      clearMangoSelectionCard();
+    } else {
+      toast(t('toast.mangoAll'), 'info');
+    }
+    await refreshMangoJobs();
+  } catch (err) {
+    toast(t('toast.actionErr', { msg: err.message }), 'error');
+  }
+}
+
+async function onMangoCancelSeries(seriesKey) {
+  try {
+    var result = await api('/api/mango/series/' + encodeURIComponent(seriesKey) + '/cancel', {
+      method: 'POST'
+    });
+    if (result.canceled) toast(t('toast.mangoCanceled'), 'success');
+    await refreshMangoJobs();
+  } catch (err) {
+    toast(t('toast.actionErr', { msg: err.message }), 'error');
+  }
+}
+
+async function onMangoSeriesAction(seriesKey, action) {
+  try {
+    var result = await api('/api/mango/series/' + encodeURIComponent(seriesKey) + '/' + action, {
+      method: 'POST'
+    });
+    if (action === 'pause' && result.paused) toast(t('toast.mangoPaused'), 'info');
+    if (action === 'resume' && result.resumed) toast(t('toast.mangoResumed'), 'success');
+    if (action === 'delete') {
+      toast(t('toast.mangoDeleted', { n: result.deleted || 0 }), 'success');
+    }
+    await refreshMangoJobs();
+  } catch (err) {
+    toast(t('toast.actionErr', { msg: err.message }), 'error');
+  }
+}
+
+function mgVolumeChapters(volumeKey) {
+  var series = state.mango.series;
+  if (!series) return [];
+  var volume = volumeKey.split(':').slice(1).join(':');
+  return series.chapters.filter(function (c) { return String(c.volume) === volume; });
+}
+
+function mgSelectVolume(volumeKey, select) {
+  mgVolumeChapters(volumeKey).forEach(function (c) {
+    if (select && !c.pending && !c.external && !c.unavailable) {
+      state.mango.selection[c.id] = true;
+    } else if (!select) {
+      delete state.mango.selection[c.id];
+    }
+  });
+  mgRerenderSelection();
 }
 
 /* ---------------- render: sidebar widget ---------------- */
@@ -1294,7 +2047,92 @@ function historyRows() {
   return rows;
 }
 
+/* ---------------- render: mango history ---------------- */
+
+function mgHistoryGroups(rows) {
+  var groups = {};
+  rows.forEach(function (row) {
+    var key = row.series_key;
+    if (!groups[key]) {
+      groups[key] = { key: key, title: row.series_title, year: row.year, chapters: [] };
+    }
+    groups[key].chapters.push(row);
+  });
+  return Object.keys(groups).map(function (key) { return groups[key]; });
+}
+
+function mgHistoryRow(entry) {
+  return '<div class="mg-ch-row mg-q-row">' +
+    '<span class="mg-ch-name" title="' + escapeHtml(entry.label) + '">' +
+      escapeHtml(entry.label) + '</span>' +
+    '<span class="mg-h-date">' + escapeHtml(formatDate(entry.created_at)) + '</span>' +
+    '<span class="mg-ch-status"><span class="mg-pill mg-pill-done">' +
+      escapeHtml(t('status.done')) + '</span></span>' +
+    '</div>';
+}
+
+function renderMangoHistory() {
+  var box = $('mango-history');
+  var empty = $('mango-history-empty');
+  if (!box) return;
+  var groups = mgHistoryGroups(state.mangoHistory);
+  empty.hidden = groups.length > 0;
+
+  box.innerHTML = groups.map(function (group) {
+    var chapters = group.chapters.slice().sort(function (a, b) {
+      return (parseFloat(a.volume) || 0) - (parseFloat(b.volume) || 0) ||
+        (parseFloat(a.number) || 0) - (parseFloat(b.number) || 0);
+    });
+    var last = chapters.reduce(function (max, c) {
+      return Math.max(max, c.created_at || 0);
+    }, 0);
+    var title = group.title
+      ? (group.year ? group.title + ' [' + group.year + ']' : group.title)
+      : group.key;
+    var entries = chapters.map(function (c) {
+      var lang = c.language && String(c.language).toLowerCase() !== 'ru'
+        ? ' [' + c.language + ']'
+        : '';
+      return {
+        id: String(c.chapter_id),
+        label: c.number + lang + (c.title ? ' - ' + c.title : ''),
+        volume: c.volume,
+        number: c.number,
+        title: c.title,
+        language: c.language,
+        status: 'done',
+        created_at: c.created_at,
+      };
+    });
+    return '<article class="mg-card mg-group">' +
+      '<div class="mg-group-head">' +
+        '<div class="mg-group-id">' +
+          '<div class="mg-group-title"><span class="mg-group-name">' +
+            escapeHtml(title) + '</span></div>' +
+          '<div class="mg-group-meta">' + chapters.length + ' ' +
+            escapeHtml(tp('pl.chapters', chapters.length)) + ' · ' +
+            escapeHtml(formatDate(last)) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="mg-volumes-wrap"><div class="mg-vol-scroll">' +
+        mgVolumesHtml('hist' + group.key, entries, false, mgHistoryRow, group.key) +
+      '</div></div>' +
+    '</article>';
+  }).join('');
+}
+
 function renderHistory() {
+  var mangoMode = state.historyMode === 'mango';
+  $('history-files').hidden = mangoMode;
+  $('history-mango').hidden = !mangoMode;
+  document.querySelectorAll('#history-mode .seg-btn').forEach(function (btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-hmode') === state.historyMode);
+  });
+  if (mangoMode) {
+    renderMangoHistory();
+    return;
+  }
+
   var rows = historyRows();
   var shown = rows.slice(0, HISTORY_RENDER_LIMIT);
   var tb = $('history-tbody');
@@ -1540,6 +2378,16 @@ async function refresh() {
     state.netError = '';
     if (wasError) toast(t('toast.netOk'), 'success');
     if (!state.settingsDirty) fillSettingsForm();
+    // Задания манги опрашиваем только когда они нужны: на вкладке
+    // «Манга» или пока есть живое задание (прогресс идёт в фоне).
+    if (currentRoute() === 'mango' || state.mango.jobs.some(function (job) {
+      return job.status === 'running';
+    })) {
+      refreshMangoJobs();
+    }
+    if (currentRoute() === 'history' && state.historyMode === 'mango') {
+      refreshMangoHistory();
+    }
     renderAll();
   } catch (err) {
     if (!state.netError) toast(t('toast.netErr', { msg: err.message }), 'error');
@@ -1693,6 +2541,144 @@ function bindEvents() {
     if (e.target === $('modal-overlay')) closeModal();
   });
   $('add-form').addEventListener('submit', onAddSubmit);
+
+  $('mango-form').addEventListener('submit', onMangoResolve);
+  $('mango-langs').addEventListener('click', function (e) {
+    var chip = e.target.closest('[data-lang]');
+    if (!chip) return;
+    onMangoLanguage(chip.getAttribute('data-lang'));
+  });
+  $('mango-discard').addEventListener('click', clearMangoSelectionCard);
+  $('mango-vol-toggle').addEventListener('click', function () {
+    state.mango.collapsed['sel:all'] = !state.mango.collapsed['sel:all'];
+    renderMango();
+  });
+  $('mango-chapters').addEventListener('change', function (e) {
+    var volBox = e.target.closest('[data-vol-check]');
+    if (volBox) {
+      var volumeKey = volBox.getAttribute('data-vol-check');
+      var inVolume = mgVolumeChapters(volumeKey);
+      var allSelected = inVolume.length > 0 && inVolume.every(function (c) {
+        return state.mango.selection[c.id];
+      });
+      mgSelectVolume(volumeKey, !allSelected);
+      return;
+    }
+    var box = e.target.closest('[data-chapter]');
+    if (!box) return;
+    var id = box.getAttribute('data-chapter');
+    if (box.checked) state.mango.selection[id] = true;
+    else delete state.mango.selection[id];
+    mgRerenderSelection();
+  });
+
+  function mgHandleVolumeDelete(e) {
+    var btn = e.target.closest('[data-del-vol]');
+    if (!btn) return false;
+    var seriesKey = btn.getAttribute('data-del-series');
+    var volume = btn.getAttribute('data-del-vol');
+    var key = 'mg-vol-del:' + seriesKey + ':' + volume;
+    if (isArmed(key)) {
+      disarm(key);
+      deleteMangoVolume(seriesKey, volume);
+    } else {
+      arm(key);
+      $('mango-chapters').dataset.key = '';
+      renderMango();
+      if (state.historyMode === 'mango') renderMangoHistory();
+    }
+    return true;
+  }
+
+  function mgToggleVolume(e) {
+    var head = e.target.closest('[data-vol-toggle]');
+    if (!head || e.target.closest('input, button')) return;
+    var key = head.getAttribute('data-vol-toggle');
+    state.mango.expanded[key] = !state.mango.expanded[key];
+    $('mango-chapters').dataset.key = '';
+    renderMango();
+    if (state.historyMode === 'mango') renderMangoHistory();
+  }
+  $('mango-chapters').addEventListener('click', function (e) {
+    if (mgHandleVolumeDelete(e)) return;
+    var volAll = e.target.closest('[data-vol-all]');
+    if (volAll) {
+      mgSelectVolume(volAll.getAttribute('data-vol-all'), true);
+      return;
+    }
+    var volNone = e.target.closest('[data-vol-none]');
+    if (volNone) {
+      mgSelectVolume(volNone.getAttribute('data-vol-none'), false);
+      return;
+    }
+    mgToggleVolume(e);
+  });
+  $('mango-jobs').addEventListener('click', function (e) {
+    var jobAll = e.target.closest('[data-job-all]');
+    if (jobAll) {
+      var allKey = jobAll.getAttribute('data-job-all');
+      state.mango.collapsed[allKey] = !state.mango.collapsed[allKey];
+      renderMango();
+      return;
+    }
+    var pause = e.target.closest('[data-pause-series]');
+    if (pause) {
+      onMangoSeriesAction(pause.getAttribute('data-pause-series'), 'pause');
+      return;
+    }
+    var resume = e.target.closest('[data-resume-series]');
+    if (resume) {
+      onMangoSeriesAction(resume.getAttribute('data-resume-series'), 'resume');
+      return;
+    }
+    var cancel = e.target.closest('[data-cancel-series]');
+    if (cancel) {
+      var key = cancel.getAttribute('data-cancel-series');
+      if (isArmed('mg-cancel:' + key)) {
+        disarm('mg-cancel:' + key);
+        onMangoCancelSeries(key);
+      } else {
+        arm('mg-cancel:' + key);
+        renderMango();
+      }
+      return;
+    }
+    var del = e.target.closest('[data-delete-series]');
+    if (del) {
+      var deleteKey = del.getAttribute('data-delete-series');
+      if (isArmed('mg-delete:' + deleteKey)) {
+        disarm('mg-delete:' + deleteKey);
+        onMangoSeriesAction(deleteKey, 'delete');
+      } else {
+        arm('mg-delete:' + deleteKey);
+        renderMango();
+      }
+      return;
+    }
+    if (mgHandleVolumeDelete(e)) return;
+    mgToggleVolume(e);
+  });
+  $('mango-history').addEventListener('click', function (e) {
+    if (mgHandleVolumeDelete(e)) return;
+    mgToggleVolume(e);
+  });
+  $('history-mode').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-hmode]');
+    if (!btn) return;
+    state.historyMode = btn.getAttribute('data-hmode');
+    if (state.historyMode === 'mango') refreshMangoHistory(true);
+    renderHistory();
+  });
+  $('mango-select-all').addEventListener('click', function () {
+    setMangoSelection(function () { return true; });
+  });
+  $('mango-select-new').addEventListener('click', function () {
+    setMangoSelection(function (c) { return !c.downloaded; });
+  });
+  $('mango-select-none').addEventListener('click', function () {
+    setMangoSelection(function () { return false; });
+  });
+  $('mango-download').addEventListener('click', onMangoDownload);
   $('f-url').addEventListener('input', function () {
     var f = $('f-url').closest('.field');
     if (f) f.classList.remove('is-invalid');

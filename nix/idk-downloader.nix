@@ -16,7 +16,10 @@
 #     dataDir = "/idkselfhost/idk-downloader";                # база (история + настройки)
 #     downloadDir = "/idkselfhost/idk-downloader/downloads";  # куда качать без медиатеки
 #     libraryDir = "/idkselfhost/Media";               # опционально: качать сразу в медиатеку
+#     mangoDir = "/idkselfhost/Manga";                 # опционально: куда складывать мангу
 #     extraPackages = [ pkgs.ffmpeg ];                 # опционально: .m3u8 (HLS)
+#     # Chromium для манга-источников берётся из nixpkgs автоматически
+#     # (опция chromium, по умолчанию pkgs.chromium).
 #   };
 #
 # Обновление версии: поменять rev на новый тег репозитория, поставить
@@ -45,15 +48,16 @@ let
     hash = "sha256-hXU9n4nlh/Tw27VkB/0MvLyH9RirSOjP22luJTcKGXc=";
   };
 
-  # Серверу нужен только Node.js: npm-зависимостей нет (встроенный node:sqlite,
-  # значит нужен Node >= 22.5). nodejs_22 есть не во всех nixpkgs — на старых
-  # берём pkgs.nodejs (тогда проверьте, что там >= 22.5).
+  # Серверу нужен Node.js (встроенный node:sqlite требует Node >= 22.5) и одна
+  # npm-зависимость puppeteer-core — клиент к Chromium для манга-источников.
+  # nodejs_22 есть не во всех nixpkgs — на старых берём pkgs.nodejs (проверьте >= 22.5).
   nodejs = pkgs.nodejs_22 or pkgs.nodejs;
 
   # Только то, что нужно серверу: без тестов, логов, базы и загрузок.
   # Каталоги перечислены отдельно — иначе фильтр отсекает их вместе с содержимым.
   serverSrc = lib.sourceByRegex "${fetched}/server" [
     "^package\\.json$"
+    "^package-lock\\.json$"
     "^README\\.md$"
     "^src$"
     "^src/.*$"
@@ -62,25 +66,31 @@ let
   ];
 
   # ── Пакет (то же, что nix/package.nix, но из скачанных исходников) ──────
-  defaultPackage = pkgs.stdenv.mkDerivation {
+  defaultPackage = pkgs.buildNpmPackage {
     pname = "idk-downloader";
     version = (lib.importJSON "${serverSrc}/package.json").version;
     src = serverSrc;
 
+    inherit nodejs;
+    # Хеш npm-зависимостей (puppeteer-core): при обновлении package-lock.json
+    # пересчитать через `nix run nixpkgs#prefetch-npm-deps -- server/package-lock.json`.
+    npmDepsHash = "sha256-8ZRfxkTtCQoWw8pwY03+BGxLuxjz4xqU6HChfZ7QkRM=";
+    dontNpmBuild = true;
     nativeBuildInputs = [ pkgs.makeWrapper ];
 
     installPhase = ''
       runHook preInstall
 
       mkdir -p $out/share/idk-downloader $out/bin
-      cp -r package.json README.md src public $out/share/idk-downloader/
+      cp -r package.json package-lock.json node_modules src public README.md $out/share/idk-downloader/
 
       # Обёртка: запускает node с сервером и задаёт разумные пути по умолчанию,
       # чтобы `nix run` работал без настройки (в Store писать нельзя).
       makeWrapper ${lib.getExe nodejs} $out/bin/idk-downloader \
         --add-flags "$out/share/idk-downloader/src/index.js" \
         --run 'export DB_FILE="''${DB_FILE:-''${XDG_STATE_HOME:-$HOME/.local/state}/idk-downloader/grabber.db}"' \
-        --run 'export DOWNLOAD_DIR="''${DOWNLOAD_DIR:-''${XDG_DOWNLOAD_DIR:-$HOME/Downloads}/idk-downloader}"'
+        --run 'export DOWNLOAD_DIR="''${DOWNLOAD_DIR:-''${XDG_DOWNLOAD_DIR:-$HOME/Downloads}/idk-downloader}"' \
+        --prefix PATH : ${lib.makeBinPath [ pkgs.chromium ]}
 
       runHook postInstall
     '';
@@ -170,6 +180,15 @@ in
       '';
     };
 
+    mangoDir = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Каталог манги (начальное значение, потом можно поменять в веб-морде).
+        null — подпапка «mango» в папке загрузок.
+      '';
+    };
+
     environmentFile = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
@@ -192,6 +211,16 @@ in
       default = [ ];
       example = lib.literalExpression "[ pkgs.ffmpeg ]";
       description = "Пакеты в PATH сервиса (например, ffmpeg для HLS/.m3u8).";
+    };
+
+    chromium = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = pkgs.chromium;
+      description = ''
+        Chromium для манга-источников (DleGuard пропускает только настоящий
+        браузер). null — не ставить Chromium; тогда в веб-морде (Настройки →
+        Манга) нужно указать путь к своему бинарнику.
+      '';
     };
 
     extraServiceConfig = lib.mkOption {
@@ -220,7 +249,8 @@ in
     systemd.tmpfiles.rules = [
       "d ${cfg.dataDir} 0750 ${cfg.user} ${cfg.group} -"
       "d ${cfg.downloadDir} 0750 ${cfg.user} ${cfg.group} -"
-    ] ++ lib.optional (cfg.libraryDir != null) "d ${cfg.libraryDir} 0775 ${cfg.user} ${cfg.group} -";
+    ] ++ lib.optional (cfg.libraryDir != null) "d ${cfg.libraryDir} 0775 ${cfg.user} ${cfg.group} -"
+    ++ lib.optional (cfg.mangoDir != null) "d ${cfg.mangoDir} 0755 ${cfg.user} ${cfg.group} -";
 
     systemd.services.idk-downloader = {
       description = "idk downloader";
@@ -229,7 +259,7 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
 
-      path = cfg.extraPackages;
+      path = cfg.extraPackages ++ lib.optional (cfg.chromium != null) cfg.chromium;
 
       environment = {
         PORT = toString cfg.port;
@@ -238,6 +268,8 @@ in
         DOWNLOAD_DIR = cfg.downloadDir;
       } // lib.optionalAttrs (cfg.libraryDir != null) {
         LIBRARY_DIR = cfg.libraryDir;
+      } // lib.optionalAttrs (cfg.mangoDir != null) {
+        MANGO_DIR = cfg.mangoDir;
       } // cfg.extraEnvironment;
 
       serviceConfig = {
@@ -249,7 +281,9 @@ in
         Restart = "on-failure";
         RestartSec = 5;
         EnvironmentFile = lib.optional (cfg.environmentFile != null) cfg.environmentFile;
-        RequiresMountsFor = [ cfg.downloadDir ] ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir;
+        RequiresMountsFor = [ cfg.downloadDir ]
+          ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir
+          ++ lib.optional (cfg.mangoDir != null) cfg.mangoDir;
 
         # Ограничения доступа (серверу нужен только сеть и свои каталоги)
         NoNewPrivileges = true;
@@ -261,7 +295,8 @@ in
         RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
         CapabilityBoundingSet = "";
         ReadWritePaths = [ cfg.dataDir cfg.downloadDir ]
-          ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir;
+          ++ lib.optional (cfg.libraryDir != null) cfg.libraryDir
+          ++ lib.optional (cfg.mangoDir != null) cfg.mangoDir;
       } // cfg.extraServiceConfig;
     };
 

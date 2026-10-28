@@ -58,10 +58,15 @@ export const config = {
   defaultDownloadDir: process.env.DOWNLOAD_DIR || path.join(rootDir, 'downloads'),
   /** Начальное значение папки медиатеки (нужно для NixOS-модуля); дальше — веб-морда. */
   defaultLibraryDir: process.env.LIBRARY_DIR || '',
+  /** Начальное значение папки манги (пусто — подпапка mango в папке загрузок). */
+  defaultMangoDir: process.env.MANGO_DIR || '',
   publicDir: path.join(rootDir, 'public'),
 
   /** Путь к ffmpeg (нужен только для HLS/m3u8). */
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
+
+  /** Chromium для манга-источников (DleGuard); пусто — ищем по типовым путям/PATH. */
+  chromiumPath: process.env.CHROMIUM_PATH || '',
 
   userAgent:
     process.env.USER_AGENT ||
@@ -83,7 +88,8 @@ export function usage() {
 Всё остальное настраивается в веб-морде: папка загрузок и медиатеки,
 шаблоны имён, категории, лимиты загрузок, токен доступа.
 Переменные окружения (для systemd/NixOS): PORT, HOST, DB_FILE, DOWNLOAD_DIR,
-LIBRARY_DIR (начальное значение папки медиатеки), AUTH_TOKEN, FFMPEG_PATH, USER_AGENT.
+LIBRARY_DIR (начальное значение папки медиатеки), MANGO_DIR (начальное значение
+папки манги), AUTH_TOKEN, FFMPEG_PATH, CHROMIUM_PATH, USER_AGENT.
 
 Примеры:
   node src/index.js --port 8081

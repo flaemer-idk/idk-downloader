@@ -14,6 +14,10 @@ const DEFAULT_SETTINGS = {
   // Медиатека: пусто — качать в папку загрузок; иначе абсолютный путь
   // (начальное значение можно задать переменной LIBRARY_DIR)
   library_dir: config.defaultLibraryDir,
+  // Манга: пусто — подпапка mango в папке загрузок (начальное значение — MANGO_DIR)
+  mango_dir: config.defaultMangoDir,
+  // Chromium для манга-источников; пусто — искать по типовым путям/PATH (CHROMIUM_PATH)
+  chromium_path: config.chromiumPath,
   // Разделы сайта → папки медиатеки (редактируется в веб-морде)
   library_categories: [
     'films = Фильмы',
@@ -120,6 +124,42 @@ function initDb(db) {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS mango_chapters (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      series_key   TEXT    NOT NULL,
+      series_url   TEXT    NOT NULL,
+      series_title TEXT,
+      year         TEXT,
+      chapter_id   TEXT    NOT NULL,
+      volume       TEXT,
+      number       TEXT,
+      title        TEXT,
+      folder       TEXT,
+      pages        INTEGER NOT NULL DEFAULT 0,
+      source       TEXT,
+      language     TEXT,
+      group_name   TEXT,
+      chapter_url  TEXT,
+      is_external  INTEGER NOT NULL DEFAULT 0,
+      created_at   INTEGER NOT NULL,
+      UNIQUE(series_key, chapter_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mango_series ON mango_chapters(series_key);
+
+    -- Стабильная папка тайтла: переименование на сайте не создаёт вторую
+    -- папку, а коллизии имён между источниками решаются один раз.
+    CREATE TABLE IF NOT EXISTS mango_series (
+      series_key TEXT PRIMARY KEY,
+      source     TEXT NOT NULL,
+      url        TEXT NOT NULL,
+      title      TEXT,
+      year       TEXT,
+      folder     TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_mango_series_folder ON mango_series(folder);
   `);
 
   // Миграция существующих баз: добавляем колонки, которых в них ещё нет.
@@ -132,6 +172,22 @@ function initDb(db) {
     ['real_height', 'INTEGER'],
   ]) {
     if (!columns.includes(name)) db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${type}`);
+  }
+
+  const mangoColumns = db
+    .prepare('PRAGMA table_info(mango_chapters)')
+    .all()
+    .map((row) => row.name);
+  for (const [name, type] of [
+    ['source', 'TEXT'],
+    ['language', 'TEXT'],
+    ['group_name', 'TEXT'],
+    ['chapter_url', 'TEXT'],
+    ['is_external', 'INTEGER NOT NULL DEFAULT 0'],
+  ]) {
+    if (!mangoColumns.includes(name)) {
+      db.exec(`ALTER TABLE mango_chapters ADD COLUMN ${name} ${type}`);
+    }
   }
 
   const insert = db.prepare('INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)');
@@ -446,4 +502,114 @@ export function serializeTask(row) {
     finishedAt: row.finished_at,
     queueHidden: row.queue_hidden === 1,
   };
+}
+
+/* ---------------- манга ---------------- */
+
+export function mangoChapterDownloaded(seriesKey, chapterId) {
+  return !!q('SELECT 1 FROM mango_chapters WHERE series_key = ? AND chapter_id = ?').get(
+    String(seriesKey),
+    String(chapterId),
+  );
+}
+
+export function getMangoSeries(seriesKey) {
+  return q('SELECT * FROM mango_series WHERE series_key = ?').get(String(seriesKey)) || null;
+}
+
+export function getMangoSeriesByFolder(folder) {
+  return q('SELECT * FROM mango_series WHERE folder = ?').get(String(folder)) || null;
+}
+
+/** Создаёт/обновляет метаданные тайтла. folder у существующей записи не меняется. */
+export function saveMangoSeries(entry) {
+  const now = Date.now();
+  q(
+    `INSERT INTO mango_series
+       (series_key, source, url, title, year, folder, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(series_key) DO UPDATE SET
+       source = excluded.source, url = excluded.url,
+       title = excluded.title, year = excluded.year,
+       updated_at = excluded.updated_at`,
+  ).run(
+    String(entry.seriesKey),
+    String(entry.source),
+    String(entry.url),
+    entry.title ?? null,
+    entry.year ?? null,
+    String(entry.folder),
+    now,
+    now,
+  );
+  return getMangoSeries(entry.seriesKey);
+}
+
+export function deleteMangoSeries(seriesKey) {
+  return Number(
+    q('DELETE FROM mango_series WHERE series_key = ?').run(String(seriesKey)).changes,
+  );
+}
+
+export function addMangoChapter(entry) {
+  q(
+    `INSERT INTO mango_chapters
+       (series_key, series_url, series_title, year, chapter_id, volume, number,
+        title, folder, pages, source, language, group_name, chapter_url,
+        is_external, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(series_key, chapter_id) DO UPDATE SET
+       pages = excluded.pages, folder = excluded.folder, title = excluded.title,
+       volume = excluded.volume, number = excluded.number,
+       source = excluded.source, language = excluded.language,
+       group_name = excluded.group_name, chapter_url = excluded.chapter_url,
+       is_external = excluded.is_external`,
+  ).run(
+    String(entry.seriesKey),
+    String(entry.seriesUrl),
+    entry.seriesTitle ?? null,
+    entry.year ?? null,
+    String(entry.chapterId),
+    entry.volume ?? null,
+    entry.number ?? null,
+    entry.title ?? null,
+    entry.folder ?? null,
+    Number(entry.pages) || 0,
+    entry.source ?? null,
+    entry.language ?? null,
+    entry.groupName ?? null,
+    entry.chapterUrl ?? null,
+    entry.external ? 1 : 0,
+    Date.now(),
+  );
+}
+
+/** Скачанные главы тайтла (для подсчёта и предупреждений). */
+export function listMangoChapters(seriesKey) {
+  return q('SELECT * FROM mango_chapters WHERE series_key = ? ORDER BY id').all(String(seriesKey));
+}
+
+/** Последние скачанные главы — история манги в интерфейсе. */
+export function listRecentMango(limit = 200) {
+  return q('SELECT * FROM mango_chapters ORDER BY created_at DESC, id DESC LIMIT ?').all(limit);
+}
+
+/** Сколько глав манги скачано всего (KPI «Готово»). */
+export function countMangoChapters() {
+  return Number(q('SELECT COUNT(*) AS n FROM mango_chapters').get().n) || 0;
+}
+
+/** Удаление произведения: история глав тайтла (папки удаляет сервис манги). */
+export function deleteMangoChapters(seriesKey) {
+  const info = q('DELETE FROM mango_chapters WHERE series_key = ?').run(String(seriesKey));
+  return Number(info.changes);
+}
+
+/** Удаление одного тома из истории тайтла. */
+export function deleteMangoVolume(seriesKey, volume) {
+  const info = q('DELETE FROM mango_chapters WHERE series_key = ? AND volume = ?').run(
+    String(seriesKey),
+    String(volume),
+  );
+  return Number(info.changes);
 }

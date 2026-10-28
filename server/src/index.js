@@ -4,6 +4,7 @@ import os from 'node:os';
 import { config, usage } from './config.js';
 import * as db from './db.js';
 import * as downloader from './downloader.js';
+import * as mango from './mango/index.js';
 import { createRequestHandler } from './api.js';
 import { log, printBanner } from './logger.js';
 
@@ -72,6 +73,7 @@ server.on('error', (error) => {
 
 function shutdown(signal) {
   log.info(`${signal}: остановка сервера…`);
+  mango.shutdown().catch(() => {});
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 }

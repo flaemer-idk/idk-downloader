@@ -44,6 +44,21 @@ oldDb.exec(`
     finished_at     INTEGER
   );
   CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE mango_chapters (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_key   TEXT    NOT NULL,
+    series_url   TEXT    NOT NULL,
+    series_title TEXT,
+    year         TEXT,
+    chapter_id   TEXT    NOT NULL,
+    volume       TEXT,
+    number       TEXT,
+    title        TEXT,
+    folder       TEXT,
+    pages        INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL,
+    UNIQUE(series_key, chapter_id)
+  );
 `);
 oldDb
   .prepare(
@@ -71,6 +86,81 @@ test('миграция добавляет real_width/real_height в старую
   }
   assert.equal(task.real_width, null);
   assert.equal(task.real_height, null);
+});
+
+test('миграция mango_chapters добавляет source/language/group/url', () => {
+  db.addMangoChapter({
+    seriesKey: 'mangadex:test',
+    seriesUrl: 'https://mangadex.org/title/test',
+    seriesTitle: 'Тест',
+    year: '2020',
+    chapterId: 'ch-1',
+    volume: '1',
+    number: '1',
+    title: 'Глава',
+    folder: '1 - Глава [en]',
+    pages: 5,
+    source: 'mangadex',
+    language: 'en',
+    groupName: 'Group',
+    chapterUrl: 'https://mangadex.org/chapter/ch-1',
+    external: false,
+  });
+
+  const row = db.listRecentMango(1)[0];
+  assert.equal(row.source, 'mangadex');
+  assert.equal(row.language, 'en');
+  assert.equal(row.group_name, 'Group');
+  assert.equal(row.chapter_url, 'https://mangadex.org/chapter/ch-1');
+  assert.equal(row.is_external, 0);
+
+  const check = new DatabaseSync(process.env.DB_FILE);
+  const columns = check
+    .prepare('PRAGMA table_info(mango_chapters)')
+    .all()
+    .map((item) => item.name);
+  check.close();
+  for (const name of ['source', 'language', 'group_name', 'chapter_url', 'is_external']) {
+    assert.ok(columns.includes(name), `нет колонки ${name}`);
+  }
+});
+
+test('mango_series: папка не меняется при переименовании, записи не смешиваются', () => {
+  const first = db.saveMangoSeries({
+    seriesKey: 'mangadex:series-1',
+    source: 'mangadex',
+    url: 'https://mangadex.org/title/series-1',
+    title: 'Старое название',
+    year: '2020',
+    folder: 'Старое название [2020]',
+  });
+  assert.equal(first.folder, 'Старое название [2020]');
+  assert.equal(db.getMangoSeriesByFolder('Старое название [2020]').series_key, 'mangadex:series-1');
+
+  db.saveMangoSeries({
+    seriesKey: 'mangadex:series-1',
+    source: 'mangadex',
+    url: 'https://mangadex.org/title/series-1',
+    title: 'Новое название',
+    year: '2020',
+    folder: 'Новое название [2020]',
+  });
+  const afterRename = db.getMangoSeries('mangadex:series-1');
+  assert.equal(afterRename.title, 'Новое название');
+  assert.equal(afterRename.folder, 'Старое название [2020]');
+
+  db.saveMangoSeries({
+    seriesKey: 'comx:series-2',
+    source: 'comx',
+    url: 'https://com-x.life/2-title.html',
+    title: 'Другой тайтл',
+    year: '2020',
+    folder: 'Другой тайтл [2020]',
+  });
+  assert.equal(db.getMangoSeries('comx:series-2').folder, 'Другой тайтл [2020]');
+
+  db.deleteMangoSeries('mangadex:series-1');
+  assert.equal(db.getMangoSeries('mangadex:series-1'), null);
 });
 
 test('prepareTask принимает реальное разрешение и чистит мусор', () => {

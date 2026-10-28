@@ -11,6 +11,41 @@
 
 ## 1. Модули по файлам
 
+### `src/mango/` — манга (com-x.life, MangaDex, MangaLib)
+
+Отдельная подсистема: 1 задание = пачка глав, внутри — последовательно.
+
+- `naming.js` — чистые правила имён (`sanitizeName`, `parseChapterString`,
+  `chapterFolderName`, `seriesFolderName`, `pageFileName`). Покрыты тестами.
+- `comx.js` — адаптер com-x.life: разбор ссылок, скачивание картинок (DleGuard
+  хосты картинок не охраняет — обычный `fetch`), выбор расширения по
+  `Content-Type` (CDN отдаёт WebP даже при `.jpg` в URL).
+- `mangadex.js` — адаптер MangaDex API v5: метаданные, feed с языком,
+  `at-home` для страниц, свёртка дублей групп, лимит ~5 req/s, отчёт
+  MangaDex@Home. HTML `mangadex.org` не открывается (он может быть заблокирован).
+- `mangalib.js` — адаптер MangaLib: `api.imglib.info/api` (резерв
+  `api.cdnlibs.org/api`), заголовок `site-id: 1`, поиск по `q`, главы из
+  `/manga/{slug_url}/chapters`, страницы из `/manga/{slug_url}/chapter`.
+  Хосты картинок берутся из `/constants?fields[]=imageServers` (`download`,
+  `main`, `secondary`, `compress`), есть fallback на `img3.cdnlibs.org` и
+  зеркала. Браузер не используется.
+- `browser.js` — серверный headless Chromium через `puppeteer-core` (тонкий
+  клиент к системному браузеру, не Selenium): ленивый запуск, постоянный профиль
+  рядом с БД, скрытый `navigator.webdriver`, один браузер на все запросы
+  (очередь `exclusive`). Нужен потому, что DleGuard пропускает только настоящий
+  браузерный отпечаток — curl/Node-fetch тарпитятся по таймауту. При старте
+  сервера браузер не запускается: только в `fetchMangaInfo`/`fetchReaderInfo`.
+- `index.js` — сервис: `resolveManga` (ComX/MangaDex/MangaLib → название, год,
+  главы с признаком «уже скачано»), `createDownload` (фильтр уже скачанного,
+  фоновое задание, прогресс по страницам), `listJobs`, `cancelJob`, `shutdown`.
+
+Структура на диске: `{Название} [{год}]/Volume N/«8» или «8 - Название»/000.webp`.
+Для MangaDex главы не на русском получают суффикс `[en]` (чтобы ru/en не
+смешивались в одной папке); MangaLib всегда русский, без суффикса. Частичная
+глава живёт как `<папка>.idk-part` и переименовывается целиком; существующая
+папка = глава скачана. Дизайн — [`../mango.md`](../mango.md) (исторический
+прототип — `prototypes/mango/mango.md`).
+
 ### `src/config.js` — что можно настроить при старте
 
 Философия: **из командной строки меняется только порт** (плюс `--help`,
@@ -21,8 +56,9 @@
   `-p8081`, `--port=8081`), `-h/--help`, `-v/--version`. Неизвестный аргумент —
   понятная ошибка, а не падение.
 - Переменные окружения (нужны для systemd/NixOS): `PORT`, `HOST`, `DB_FILE`,
-  `DOWNLOAD_DIR`, `LIBRARY_DIR` (начальное значение медиатеки), `AUTH_TOKEN`,
-  `FFMPEG_PATH`, `USER_AGENT`.
+  `DOWNLOAD_DIR`, `LIBRARY_DIR` (начальное значение медиатеки), `MANGO_DIR`
+  (начальное значение папки манги), `CHROMIUM_PATH` (браузер только для
+  com-x.life), `AUTH_TOKEN`, `FFMPEG_PATH`, `USER_AGENT`.
 - `usage()` — текст `--help`. Он держится в одном месте с текущими дефолтами.
 
 ### `src/logger.js` — логи и баннер
@@ -239,6 +275,36 @@ CREATE TABLE tasks (
 CREATE INDEX idx_tasks_queue ON tasks(status, next_attempt_at, id);
 
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+CREATE TABLE mango_chapters (              -- история скачанных глав манги
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  series_key TEXT NOT NULL,                -- «comx:26588» / «mangadex:<uuid>» / «mangalib:206»
+  series_url TEXT NOT NULL,
+  series_title TEXT, year TEXT,
+  chapter_id TEXT NOT NULL,                -- id главы с сайта
+  volume TEXT, number TEXT, title TEXT,    -- разобранная строка «1 - 2.5 Экстра»
+  folder TEXT,                             -- имя папки главы на диске
+  pages INTEGER NOT NULL DEFAULT 0,
+  source TEXT,                             -- comx | mangadex | mangalib
+  language TEXT,                           -- ru, en, pt-br…
+  group_name TEXT,                         -- сканлейт-группа MangaDex/MangaLib
+  chapter_url TEXT,                        -- ссылка на главу
+  is_external INTEGER NOT NULL DEFAULT 0,  -- externalUrl у MangaDex
+  created_at INTEGER NOT NULL,
+  UNIQUE(series_key, chapter_id)
+);
+CREATE INDEX idx_mango_series ON mango_chapters(series_key);
+
+CREATE TABLE mango_series (                -- стабильная папка тайтла
+  series_key TEXT PRIMARY KEY,             -- comx:26588 / mangadex:<uuid> / mangalib:206
+  source TEXT NOT NULL,
+  url TEXT NOT NULL,
+  title TEXT, year TEXT,
+  folder TEXT NOT NULL,                    -- не пересчитывается при переименовании
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_mango_series_folder ON mango_series(folder);
 ```
 
 Времена — `Date.now()` (мс). Многих «полей фильма» нет, потому что сервер их не
@@ -251,6 +317,8 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 | `download_dir` | `server/downloads` | Папка загрузок (если медиатека не задана) |
 | `library_dir` | пусто | Папка медиатеки. Задана → файлы пишутся сразу туда, минуя загрузки |
 | `library_categories` | `films = Фильмы`… | Построчно: `раздел = папка`. `default` — для остальных разделов |
+| `mango_dir` | пусто | Папка манги; пусто — подпапка `mango` в папке загрузок |
+| `chromium_path` | пусто | Путь к Chromium только для com-x.life (DleGuard); MangaDex/MangaLib не используют браузер |
 | `max_concurrent` | `2` | Параллельных загрузок (1–16) |
 | `max_attempts` | `5` | Попыток на задачу (1–50) |
 | `retry_delay_ms` | `15000` | Базовая задержка повтора (× номер попытки, потолок 5 минут) |
@@ -291,6 +359,16 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 | `POST /api/movies/:movieId/cancel` | Отменить незаконченные задачи фильма. Ответ: `{canceled, movie}` — свежая сводка, чтобы попап сразу перерисовался |
 | `GET /api/settings` | Настройки как есть |
 | `PATCH /api/settings` | Частичное обновление. Валидация: `max_concurrent` 1–16, `max_attempts` 1–50, `retry_delay_ms` 1000–3600000; пути резолвятся в абсолютные и создаются; шаблоны не могут быть пустыми |
+| `POST /api/mango/resolve` | `{url, language?}` — com-x.life, MangaDex или MangaLib. Возвращает `{source, sourceLabel, title, year, folder, language, languages, chapters:[{id, volume, number, title, folder, language, group, external, unavailable, downloaded, pending}]}` |
+| `POST /api/mango/download` | `{url, chapters:[id…], language?}` — ставит пачку глав в фоновую очередь. Ответ `201 {job, alreadyDownloaded, total, info}`; если всё выбранное уже скачано — `job: null` (интерфейс показывает предупреждение) |
+| `GET /api/mango/jobs` | Задания манги с прогрессом: `current {label, pagesDone, pagesTotal}`, `done/total`, `failed[]`; `stats.chapters` — сколько глав в истории |
+| `GET /api/mango/jobs/:id` | Полное задание с главами и их статусами (интерфейс догружает для завершённых карточек один раз) |
+| `POST /api/mango/series/:key/pause` \| `/resume` | Пауза/продолжение всех живых заданий тайтла; текущая страница дописывается, дальше задание ждёт |
+| `POST /api/mango/series/:key/cancel` | Отменить все живые задания тайтла (недокачанная глава `.idk-part` удаляется) |
+| `POST /api/mango/series/:key/delete` | Удалить скачанное: останавливает задания, убирает папки `Volume N` и историю глав; `Cover.png` и файлы юзера в папке тайтла не трогает |
+| `POST /api/mango/series/:key/volume/:volume/delete` | Удалить один том: папку `Volume N` и его записи в истории (пока задание живо — ошибка) |
+| `POST /api/mango/jobs/:id/cancel` | Отменить одно задание (недокачанная глава `.idk-part` удаляется) |
+| `GET /api/mango/history` | Последние скачанные главы из БД (`limit`, максимум 1000) |
 
 Примеры:
 
